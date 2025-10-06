@@ -25,7 +25,13 @@ class ScriptControl(metaclass=SingletonMeta):
 
     
     def start_listener(self):
-        """Start a thread to listen for termination and pause requests."""
+        """Start a thread to listen for termination and pause requests.
+
+        Uses keyboard.hook so we can differentiate physical PageUp/PageDown keys
+        from numpad 9/3 (which report as PageUp/PageDown when NumLock is off).
+        We only act on PageUp/PageDown when the event is NOT from keypad. This
+        prevents accidental termination/pause when using numpad navigation.
+        """
         import threading
         threading.Thread(target=self._listen_for_control, daemon=True).start()
 
@@ -42,18 +48,59 @@ class ScriptControl(metaclass=SingletonMeta):
         else:
             self.log.warning("Break proposed but no break configuration set.")
     def _listen_for_control(self):
-        """Thread function to listen for control signals."""
-        import keyboard
-        while True:
-            if keyboard.is_pressed('page up'):
-                self.terminate = True
-                return
-            if keyboard.is_pressed('page down'):
-                self.pause = not self.pause
-                while keyboard.is_pressed('page down'):
-                    # Wait until the key is released
-                    time.sleep(0.1)
-            time.sleep(0.05)
+        """Thread function to listen for control signals.
+
+        Distinguishes keypad vs non-keypad PageUp/PageDown using event.is_keypad.
+        Terminate: Physical PageUp (not keypad) key down.
+        Pause toggle: Physical PageDown (not keypad) key down.
+
+        Numpad 9 / 3 (NumLock off -> PageUp/PageDown) are ignored so they don't
+        unintentionally terminate or pause the script.
+        """
+        try:
+            import keyboard  # type: ignore
+        except ImportError:
+            self.log.error("keyboard module not available; control hotkeys disabled.")
+            return
+
+        # Debounce to avoid rapid toggles if OS sends repeats
+        last_pause_toggle = 0.0
+        toggle_cooldown = 0.4  # seconds
+
+        def handler(e):
+            nonlocal last_pause_toggle
+            try:
+                # We only act on key down events
+                if getattr(e, 'event_type', None) != 'down':
+                    return
+                name = (e.name or '').lower()
+                is_keypad = getattr(e, 'is_keypad', False)
+
+                # Distinguish standard vs keypad
+                if name in ('page up', 'pageup'):
+                    if not is_keypad:  # real PageUp
+                        self.terminate = True
+                elif name in ('page down', 'pagedown'):
+                    if not is_keypad:  # real PageDown
+                        now = time.time()
+                        if now - last_pause_toggle >= toggle_cooldown:
+                            self.pause = not self.pause
+                            last_pause_toggle = now
+                else:
+                    # Optional future: map dedicated keypad combo if desired
+                    pass
+            except Exception as ex:  # Never let hook raise
+                self.log.debug(f"Control hook error: {ex}")
+
+        keyboard.hook(handler)
+        # Keep thread alive until termination requested
+        while not self.terminate:
+            time.sleep(0.25)
+        # When terminate set, unhook all to clean up
+        try:
+            keyboard.unhook_all()
+        except Exception:
+            pass
 
     @property
     def terminate(self):
