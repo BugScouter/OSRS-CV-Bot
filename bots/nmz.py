@@ -291,6 +291,9 @@ class BotExecutor(Bot):
     @control.guard
     def get_smallest_overload(self):
         """Get the smallest overload potion from the inventory"""
+        
+        self.client.click_toolplane(ToolplaneTab.INVENTORY)
+        
         overload_items = [11733, 11732, 11731, 11730 ]
         overloads = self.client.get_inv_items(
             overload_items,
