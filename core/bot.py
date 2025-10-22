@@ -21,3 +21,8 @@ class Bot:
         
         self.api = BotAPI(self.client)
         self.api.start(port=5432)
+        
+        
+    @property
+    def terminate(self) -> bool:
+        return self.control.terminate
