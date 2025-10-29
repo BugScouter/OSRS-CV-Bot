@@ -1,4 +1,4 @@
-from .cfg_types import StringParam, IntParam, FloatParam, BooleanParam, RGBParam
+from .cfg_types import RGBParam
 from .cfg_types import TYPES as CFG_TYPES
 
 example_config = {
@@ -15,7 +15,7 @@ class BotConfigMixin():
     Mixin class for bot configuration.
     This class can be used to add configuration properties to a bot.
     """
-    max_time: IntParam = IntParam(60)  
+    # Configuration properties should be defined in bot classes  
 
 
 

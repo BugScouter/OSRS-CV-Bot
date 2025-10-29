@@ -1,12 +1,11 @@
+# ruff: noqa: BLE001
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import StringParam, IntParam, RGBParam, RGBListParam, RouteParam, BreakCfgParam, RangeParam, FloatParam, WaypointParam
+from bots.core.cfg_types import RouteParam, BreakCfgParam, RangeParam, WaypointParam, RGBParam
 from core.bot import Bot
 from core.bank import BankInterface
-from core.region_match import MatchResult
 from core.osrs_client import ToolplaneTab
 from core.control import ScriptTerminationException
 
-from PIL import Image
 import random
 import time
 import keyboard
@@ -17,15 +16,15 @@ class BotConfig(BotConfigMixin):
     # Configuration parameters
 
     # Bank and mining configuration
-    bank_tile: RGBParam = RGBParam(0, 255, 0)  # Yellow by default
-    ore_type: StringParam = StringParam("Iron ore")  # Default ore type
-    inv_full_at: IntParam = IntParam(27)  # Default inventory capacity (28 slots)
-    ore_options: RGBListParam = RGBListParam([
-        #RGBParam(255, 0, 0),     # Red
-        #RGBParam(255, 0, 50),    # Pink-Red
-        RGBParam(255, 0, 100),    # Darker Pink
-        RGBParam(255, 0, 150),    # Darker Pink-Red
-    ])
+    bank_tile: RGBParam = RGBParam.from_tuple((0, 255, 0))  # Green by default
+    ore_type: str = "Iron ore"  # Default ore type
+    inv_full_at: int = 27  # Default inventory capacity (28 slots)
+    ore_options: list[RGBParam] = [
+        # RGBParam.from_tuple((255, 0, 0)),     # Red
+        # RGBParam.from_tuple((255, 0, 50)),    # Pink-Red
+        RGBParam.from_tuple((255, 0, 100)),    # Darker Pink
+        RGBParam.from_tuple((255, 0, 150)),    # Darker Pink-Red
+    ]
     bank_to_mine: RouteParam = RouteParam([
         WaypointParam(3253, 3424, 0, 831916, 5),
         WaypointParam(3286, 3430, 0, 840108, 5),
@@ -35,13 +34,13 @@ class BotConfig(BotConfigMixin):
     ])
     
     # Optional configuration
-    max_retries: IntParam = IntParam(30)  # Maximum retry attempts
+    max_retries: int = 30  # Maximum retry attempts
     mine_click_delay: RangeParam = RangeParam(0.2, 0.5)  # Delay between mining clicks
     
     # Break configuration
     break_cfg: BreakCfgParam = BreakCfgParam(
         RangeParam(15, 45),  # break duration range in seconds
-        FloatParam(0.01)     # break chance
+        0.01     # break chance
     )
 
 class BotExecutor(Bot):
@@ -62,7 +61,7 @@ class BotExecutor(Bot):
             raise ValueError("bank_to_mine route must be specified")
     
     def start(self):
-        self.log.info(f"Starting Mining Bot for {self.cfg.ore_type.value}")
+        self.log.info("Starting Mining Bot for %s", self.cfg.ore_type)
         
         try:
             while True:
@@ -76,7 +75,7 @@ class BotExecutor(Bot):
                             ])
                         )
                         self.consecutive_failures += 1
-                        if self.consecutive_failures > self.cfg.max_retries.value:
+                        if self.consecutive_failures > self.cfg.max_retries:
                             raise RuntimeError("Too many consecutive banking failures")
                         continue
                     
@@ -84,8 +83,8 @@ class BotExecutor(Bot):
                     self.log.info("Traveling to mine...")
                     try:
                         self.mover.execute_route(self.cfg.bank_to_mine)
-                    except Exception as e:
-                        self.log.error(f"Failed to travel to mine: {e}")
+                    except (RuntimeError, ValueError, OSError) as e:
+                        self.log.error("Failed to travel to mine: %s", e)
                         # restart once
                         self.mover.execute_route(self.cfg.bank_to_mine)
                     
@@ -98,8 +97,8 @@ class BotExecutor(Bot):
                     self.log.info("Returning to bank...")
                     try:
                         self.mover.execute_route(self.cfg.bank_to_mine.reverse())
-                    except Exception as e:
-                        self.log.error(f"Failed to return to bank: {e}")
+                    except (RuntimeError, ValueError, OSError) as e:
+                        self.log.error("Failed to return to bank: %s", e)
                         # restart once
                         self.mover.execute_route(self.cfg.bank_to_mine.reverse())
                     
@@ -109,25 +108,25 @@ class BotExecutor(Bot):
                     # Check if we should propose a break
                     self.control.propose_break()
                 
-                except Exception as e:
+                except (RuntimeError, ValueError, OSError) as e:
                     if isinstance(e, ScriptTerminationException):
                         raise
                     
                     self.consecutive_failures += 1
-                    self.log.error(f"Error in mining process: {e}")
+                    self.log.error("Error in mining process: %s", e)
                     
-                    if self.consecutive_failures > self.cfg.max_retries.value:
-                        self.log.critical(f"Failed {self.consecutive_failures} times in a row. Exiting.")
+                    if self.consecutive_failures > self.cfg.max_retries:
+                        self.log.critical("Failed %s times in a row. Exiting.", self.consecutive_failures)
                         sys.exit(1)
                     else:
-                        self.log.warning(f"Retry attempt {self.consecutive_failures}/{self.cfg.max_retries.value}")
+                        self.log.warning("Retry attempt %s/%s", self.consecutive_failures, self.cfg.max_retries)
                         time.sleep(3)  # Wait a bit before retrying
         
         except ScriptTerminationException as e:
-            self.log.info(f"Script termination requested: {e}")
+            self.log.info("Script termination requested: %s", e)
             self.log.info("Exiting Mining Bot")
-        except Exception as e:
-            self.log.error(f"Fatal error: {e}")
+        except (RuntimeError, ValueError, OSError) as e:
+            self.log.error("Fatal error: %s", e)
             raise
     
     def bank_items(self):
@@ -137,7 +136,7 @@ class BotExecutor(Bot):
         try:
             # Click on the bank tile
             self.client.smart_click_tile(
-                self.cfg.bank_tile.value,
+                self.cfg.bank_tile,
                 ['bank', 'banker', 'booth', 'chest'],
                 retry_hover=3,
                 retry_match=2,
@@ -165,17 +164,17 @@ class BotExecutor(Bot):
             self.bank.close()
             return True
             
-        except Exception as e:
-            self.log.error(f"Error banking items: {e}")
+        except (RuntimeError, ValueError, OSError) as e:
+            self.log.error("Error banking items: %s", e)
             return False
     
     def mine_until_full(self):
         """Mine ore until inventory has the specified number of ores"""
-        self.log.info(f"Mining until inventory has {self.cfg.inv_full_at.value} {self.cfg.ore_type.value}")
+        self.log.info("Mining until inventory has %s %s", self.cfg.inv_full_at, self.cfg.ore_type)
         
         failure_count = 0
         
-        while self.get_ore_count() < self.cfg.inv_full_at.value:
+        while self.get_ore_count() < self.cfg.inv_full_at:
             # Check for termination request
             if self.control.terminate:
                 raise ScriptTerminationException()
@@ -198,15 +197,15 @@ class BotExecutor(Bot):
                 time.sleep(self.cfg.mine_click_delay.choose())
             else:
                 failure_count += 1
-                self.log.warning(f"Failed to find ore rock ({failure_count}/{self.cfg.max_retries.value})")
+                self.log.warning("Failed to find ore rock (%s/%s)", failure_count, self.cfg.max_retries)
                 
-                if failure_count >= self.cfg.max_retries.value:
+                if failure_count >= self.cfg.max_retries:
                     self.log.error("Too many failures. Giving up mining cycle.")
                     return False
                 
                 time.sleep(1)  # Wait before retrying
-        
-        self.log.info(f"Inventory full with {self.get_ore_count()} {self.cfg.ore_type.value}")
+
+        self.log.info("Inventory full with %s %s", self.get_ore_count(), self.cfg.ore_type)
         return True
     
     def drop_gems(self):
@@ -233,7 +232,7 @@ class BotExecutor(Bot):
             gems = self.client.get_inv_items(gem_types, min_confidence=0.9)
             
             if gems:
-                self.log.info(f"Found {len(gems)} gems to drop")
+                self.log.info("Found %d gems to drop", len(gems))
                 
                 # Hold shift while clicking each gem
                 try:
@@ -251,14 +250,14 @@ class BotExecutor(Bot):
             else:
                 return False
                 
-        except Exception as e:
-            self.log.warning(f"Error dropping gems: {e}")
+        except (RuntimeError, ValueError, OSError) as e:
+            self.log.warning("Error dropping gems: %s", e)
             return False
     
     def mine_ore(self):
         """Click on an ore rock to start mining"""
         # Cycle through the ore tile colors
-        ore_tiles = self.cfg.ore_options.value
+        ore_tiles = self.cfg.ore_options
         
         if not ore_tiles:
             self.log.error("No ore tile colors specified")
@@ -269,8 +268,8 @@ class BotExecutor(Bot):
         
         try:
             self.client.smart_click_tile(
-                current_ore.value,
-                [ self.cfg.ore_type.value.split(' ')[0]],
+                current_ore,
+                [ self.cfg.ore_type.split(' ')[0] ],
                 retry_hover=1,
                 retry_match=1,
                 filter_ui=True
@@ -281,8 +280,8 @@ class BotExecutor(Bot):
                 time.sleep(0.2)
             
             return True
-        except Exception as e:
-            self.log.error(f"Error mining ore: {e}")
+        except (RuntimeError, ValueError, OSError) as e:
+            self.log.error("Error mining ore: %s", e)
             return False
     
     def get_ore_count(self):
@@ -293,11 +292,11 @@ class BotExecutor(Bot):
             time.sleep(0.3)
             
             # Get all instances of the specified ore type in inventory
-            ore_items = self.client.get_inv_items([self.cfg.ore_type.value], min_confidence=0.9)
+            ore_items = self.client.get_inv_items([self.cfg.ore_type], min_confidence=0.9)
             count = len(ore_items)
             
-            self.log.debug(f"Found {count} {self.cfg.ore_type.value} in inventory")
+            self.log.debug("Found %d %s in inventory", count, self.cfg.ore_type)
             return count
-        except Exception as e:
-            self.log.warning(f"Error checking inventory: {e}")
+        except (RuntimeError, ValueError, OSError) as e:
+            self.log.warning("Error checking inventory: %s", e)
             return 0

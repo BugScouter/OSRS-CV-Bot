@@ -1,10 +1,10 @@
+# ruff: noqa: BLE001
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam
+from bots.core.cfg_types import RangeParam, BreakCfgParam, RGBParam
 from core.bot import Bot
 from core.logger import get_logger
 from core.bank import BankInterface
 from core.item_db import ItemLookup
-from core import tools
 from core.control import ScriptControl
 
 import time
@@ -14,18 +14,18 @@ control = ScriptControl()
 
 
 class BotConfig(BotConfigMixin):
-    base_item_name: StringParam = StringParam("Battlestaff")
-    second_item_name: StringParam = StringParam("Water orb")
-    result_item_name: StringParam = StringParam("Water battlestaff")
+    base_item_name: str = "Battlestaff"
+    second_item_name: str = "Water orb"
+    result_item_name: str = "Water battlestaff"
 
-    combine_stack_size: IntParam = IntParam(14)
-    bank_tile: RGBParam = RGBParam(0, 255, 0)
-    randomize_withdraw_order: BooleanParam = BooleanParam(True)
-    combine_confirm_key: StringParam = StringParam("space")
+    combine_stack_size: int = 14
+    bank_tile: RGBParam = RGBParam.from_tuple((0, 255, 0))
+    randomize_withdraw_order: bool = True
+    combine_confirm_key: str = "space"
 
     break_cfg: BreakCfgParam = BreakCfgParam(
         RangeParam(15, 45),  # break duration range in seconds
-        FloatParam(0.01)     # break chance
+        0.01     # break chance
     )
 
 
@@ -58,7 +58,7 @@ class BotExecutor(Bot):
             if total <= 0:
                 self.log.info("No items left to combine. Exiting.")
                 return
-            self.log.info(f"Preparing to combine up to {total} items")
+            self.log.info("Preparing to combine up to %s items", total)
 
             consecutive_failures = 0
             while total > 0:
@@ -68,25 +68,25 @@ class BotExecutor(Bot):
                         self.log.error("Too many routine failures; re-checking bank and counts.")
                         break
                     delay = min(8.0, backoff_base * (2 ** (consecutive_failures - 1))) + random.uniform(0, 0.5)
-                    self.log.warning(f"Routine failed; retrying in {delay:.1f}s... ({consecutive_failures}/{max_failures})")
+                    self.log.warning("Routine failed; retrying in %.1fs... (%s/%s)", delay, consecutive_failures, max_failures)
                     time.sleep(delay)
                     continue
                 consecutive_failures = 0
-                total = max(0, total - self.cfg.combine_stack_size.value)
-                self.log.info(f"{total} items remaining")
+                total = max(0, total - self.cfg.combine_stack_size)
+                self.log.info("%s items remaining", total)
 
     # --- Internals ---
     def _open_bank(self, max_attempts: int = 3, timeout: float = 10.0) -> bool:
         attempts = 0
         while attempts < max_attempts:
-            self.client.smart_click_tile(self.cfg.bank_tile.value, ["bank"])
+            self.client.smart_click_tile(self.cfg.bank_tile, ["bank"])
             start = time.time()
             while not self.bank.is_open and (time.time() - start) < timeout:
                 time.sleep(0.25)
             if self.bank.is_open:
                 return True
             attempts += 1
-            self.log.warning(f"Bank failed to open (attempt {attempts}/{max_attempts}); retrying...")
+            self.log.warning("Bank failed to open (attempt %s/%s); retrying...", attempts, max_attempts)
         self.log.error("Unable to open bank after multiple attempts.")
         return False
 
@@ -95,9 +95,9 @@ class BotExecutor(Bot):
             if not self._open_bank():
                 self.log.error("Cannot open bank to initialize counts.")
                 return 0
-        a = self.bank.get_item_count(self.cfg.base_item_name.value)
-        b = self.bank.get_item_count(self.cfg.second_item_name.value)
-        self.log.info(f"{self.cfg.base_item_name.value}: {a} | {self.cfg.second_item_name.value}: {b}")
+        a = self.bank.get_item_count(self.cfg.base_item_name)
+        b = self.bank.get_item_count(self.cfg.second_item_name)
+        self.log.info("%s: %s | %s: %s", self.cfg.base_item_name, a, self.cfg.second_item_name, b)
         self.bank.close()
         return min(a, b)
 
@@ -107,13 +107,13 @@ class BotExecutor(Bot):
 
     def _has_both_in_inv(self) -> bool:
         return (
-            self._inv_count(self.cfg.base_item_name.value) > 0 and
-            self._inv_count(self.cfg.second_item_name.value) > 0
+            self._inv_count(self.cfg.base_item_name) > 0 and
+            self._inv_count(self.cfg.second_item_name) > 0
         )
 
     def _choose_first_item(self) -> str:
-        items = [self.cfg.base_item_name.value, self.cfg.second_item_name.value]
-        if self.cfg.randomize_withdraw_order.value:
+        items = [self.cfg.base_item_name, self.cfg.second_item_name]
+        if self.cfg.randomize_withdraw_order:
             random.shuffle(items)
         return items[0]
 
@@ -122,9 +122,9 @@ class BotExecutor(Bot):
         Updates:
             self.first_item, self.base_items, self.second_items, self.result_before
         """
-        base_name = self.cfg.base_item_name.value
-        second_name = self.cfg.second_item_name.value
-        result_name = self.cfg.result_item_name.value
+        base_name = self.cfg.base_item_name
+        second_name = self.cfg.second_item_name
+        result_name = self.cfg.result_item_name
 
         # If both items already present, skip banking/deposit entirely
         if self._has_both_in_inv():
@@ -141,10 +141,10 @@ class BotExecutor(Bot):
         # Deposit then withdraw required stacks (only when both aren't already in inv)
         self.bank.deposit_inv()
         order = [base_name, second_name]
-        if self.cfg.randomize_withdraw_order.value:
+        if self.cfg.randomize_withdraw_order:
             random.shuffle(order)
         for item in order:
-            self.bank.withdraw(item, self.cfg.combine_stack_size.value)
+            self.bank.withdraw(item, self.cfg.combine_stack_size)
 
         # Close bank to proceed
         if self.bank.is_open:
@@ -157,8 +157,8 @@ class BotExecutor(Bot):
         self.first_item = order[0]
 
     def _click_pair(self, base_items, second_items, first_item: str):
-        base_name = self.cfg.base_item_name.value
-        second_name = self.cfg.second_item_name.value
+        base_name = self.cfg.base_item_name
+        second_name = self.cfg.second_item_name
         if not base_items or not second_items:
             raise RuntimeError("Missing items in inventory after preparation")
         base = base_items[0 if first_item == base_name else -1]
@@ -173,27 +173,27 @@ class BotExecutor(Bot):
         time.sleep(random.uniform(0.5, 1.0))
         try:
             import keyboard
-            keyboard.press_and_release(self.cfg.combine_confirm_key.value)
-        except Exception as e:
-            self.log.warning(f"Unable to send keypress '{self.cfg.combine_confirm_key.value}': {e}")
+            keyboard.press_and_release(self.cfg.combine_confirm_key)
+        except (RuntimeError, ValueError, OSError) as e:
+            self.log.warning("Unable to send keypress '%s': %s", self.cfg.combine_confirm_key, e)
 
     def _wait_for_crafting(self, base_before: int, second_before: int, result_before: int) -> bool:
-        target_pairs = min(base_before, second_before, self.cfg.combine_stack_size.value)
+        target_pairs = min(base_before, second_before, self.cfg.combine_stack_size)
         start_time = time.time()
         last_progress = start_time
         max_wait = 120.0
         stall_timeout = 6.0
-        retriggered = False
+    # retriggered flag not needed; retry handled inline
 
         def crafted_so_far() -> int:
-            return max(0, self._inv_count(self.cfg.result_item_name.value) - result_before)
+            return max(0, self._inv_count(self.cfg.result_item_name) - result_before)
 
         crafted = crafted_so_far()
         while crafted < target_pairs:
             if time.time() - start_time > max_wait:
                 self.log.error("Crafting timed out.")
                 return False
-            self.log.info(f"Crafted {crafted}/{target_pairs} so far")
+            self.log.info("Crafted %s/%s so far", crafted, target_pairs)
             time.sleep(3)
             new_crafted = crafted_so_far()
             if new_crafted > crafted:
@@ -234,6 +234,6 @@ class BotExecutor(Bot):
 
             self.control.propose_break()
             return True
-        except Exception as e:
-            self.log.error(f"Routine error: {e}")
+        except (RuntimeError, ValueError, OSError) as e:
+            self.log.error("Routine error: %s", e)
             return False

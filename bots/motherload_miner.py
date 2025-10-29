@@ -1,5 +1,5 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam
+from bots.core.cfg_types import RangeParam, BreakCfgParam, RGBParam
 from core.bot import Bot
 from core.bank import BankInterface
 
@@ -36,28 +36,28 @@ class BotConfig(BotConfigMixin):
     # Configuration parameters
 
     # Ore vein tile colors
-    vein_tile_1: RGBParam = RGBParam(255, 0, 0)
-    vein_tile_2: RGBParam = RGBParam(255, 0, 40)
-    vein_tile_3: RGBParam = RGBParam(255, 0, 80)
-    vein_tile_4: RGBParam = RGBParam(255, 0, 120)
+    vein_tile_1: RGBParam = RGBParam.from_tuple((255, 0, 0))
+    vein_tile_2: RGBParam = RGBParam.from_tuple((255, 0, 40))
+    vein_tile_3: RGBParam = RGBParam.from_tuple((255, 0, 80))
+    vein_tile_4: RGBParam = RGBParam.from_tuple((255, 0, 120))
 
-    sack_size: IntParam = IntParam(189) #IntParam(108)  # Maximum pay-dirt in hopper
+    sack_size: int = 189  # Maximum pay-dirt in hopper
     
     # Other action tiles
-    hopper_tile: RGBParam = RGBParam(255, 0, 255)
-    down_ladder_tile: RGBParam = RGBParam(255, 112, 0)  # Orange - TOP of ladder
-    sack_tile: RGBParam = RGBParam(100, 50, 200)
-    bank_tile: RGBParam = RGBParam(0, 100, 100)
-    up_ladder_tile: RGBParam = RGBParam(108, 255, 255)  # Cyan - BOTTOM of ladder
+    hopper_tile: RGBParam = RGBParam.from_tuple((255, 0, 255))
+    down_ladder_tile: RGBParam = RGBParam.from_tuple((255, 112, 0))  # Orange - TOP of ladder
+    sack_tile: RGBParam = RGBParam.from_tuple((100, 50, 200))
+    bank_tile: RGBParam = RGBParam.from_tuple((0, 100, 100))
+    up_ladder_tile: RGBParam = RGBParam.from_tuple((108, 255, 255))  # Cyan - BOTTOM of ladder
     
     # Retry configuration
-    max_retries: IntParam = IntParam(5)
-    fail_retry_delay: FloatParam = FloatParam(1.5)
+    max_retries: int = 5
+    fail_retry_delay: float = 1.5
     
     # Break configuration
     break_cfg: BreakCfgParam = BreakCfgParam(
         RangeParam(15, 45),  # break duration range in seconds
-        FloatParam(0.01)     # break chance
+        0.01     # break chance
     )
 
 class BotExecutor(Bot):
@@ -73,7 +73,7 @@ class BotExecutor(Bot):
         self.upstairs = None  # Track if we're upstairs or downstairs
         self.hopper_count = 0  # Track how much paydirt is in the hopper
         self.terminate = False  # Flag to control script termination
-        self.loop_cnt = int(config.sack_size.value / 27)  # Number of times to loop through mining and banking
+        self.loop_cnt = int(config.sack_size / 27)  # Number of times to loop through mining and banking
         
     def start(self):
         self.log.info("Starting Motherload Miner Bot")
@@ -146,7 +146,7 @@ class BotExecutor(Bot):
         try:
             tile = tools.find_color_box(
                 self.client.get_filtered_screenshot(),
-                self.cfg.down_ladder_tile.value,
+                self.cfg.down_ladder_tile,
                 tol=40
             )
             for x in range(3):
@@ -175,7 +175,7 @@ class BotExecutor(Bot):
             
             # Check for gems
             gem_types = ["Uncut emerald", "Uncut ruby", "Uncut sapphire", "Uncut diamond"]
-            gems = self.client.get_inv_items(gem_types, min_confidence=0.9)
+            gems = self.client.get_inv_items(gem_types, min_confidence=0.98)
             
             if gems:
                 self.log.info(f"Found {len(gems)} gems to drop")
@@ -209,8 +209,8 @@ class BotExecutor(Bot):
         while not self.is_inventory_full():
             self.control.propose_break()
             # Check if the hopper is full
-            if self.hopper_count >= self.cfg.sack_size.value:
-                self.log.warning(f"Hopper is full ({self.hopper_count}/{self.cfg.sack_size.value}). Cannot mine until emptied.")
+            if self.hopper_count >= self.cfg.sack_size:
+                self.log.warning("Hopper is full (%d/%d). Cannot mine until emptied.", self.hopper_count, self.cfg.sack_size)
                 return False
                 
             # Check for and drop any gems
@@ -228,13 +228,13 @@ class BotExecutor(Bot):
                 time.sleep(1)
             else:
                 fail_count += 1
-                self.log.warning(f"Failed to find ore vein ({fail_count}/{self.cfg.max_retries.value})")
-                if fail_count >= self.cfg.max_retries.value:
+                self.log.warning("Failed to find ore vein (%d/%d)", fail_count, self.cfg.max_retries)
+                if fail_count >= self.cfg.max_retries:
                     self.log.error("Too many failures. Giving up mining cycle.")
                     self.deposit_paydirt()
                     self.climb_down_ladder()
                     return False
-                time.sleep(self.cfg.fail_retry_delay.value)
+                time.sleep(self.cfg.fail_retry_delay)
         
         return True
     @control.guard
@@ -242,10 +242,10 @@ class BotExecutor(Bot):
         """Attempt to mine an ore vein by cycling through different tile colors"""
         # List of tile colors to try
         vein_tiles = [
-            self.cfg.vein_tile_1.value,
-            self.cfg.vein_tile_2.value,
-            self.cfg.vein_tile_3.value,
-            self.cfg.vein_tile_4.value
+            self.cfg.vein_tile_1,
+            self.cfg.vein_tile_2,
+            self.cfg.vein_tile_3,
+            self.cfg.vein_tile_4
         ]
         
         # Cycle through the veins
@@ -266,7 +266,7 @@ class BotExecutor(Bot):
                 
             return True
         except Exception as e:
-            self.log.error(f"Error mining ore: {e}")
+            self.log.error("Error mining ore: %s", e)
             return False
     
     def is_inventory_full(self):
@@ -280,10 +280,10 @@ class BotExecutor(Bot):
             pay_dirt = self.client.get_inv_items(["Pay-dirt"], min_confidence=0.9)
             count = len(pay_dirt)
             
-            self.log.debug(f"Found {count} Pay-dirt in inventory")
+            self.log.debug("Found %d Pay-dirt in inventory", count)
             return count >= 27
         except Exception as e:
-            self.log.warning(f"Error checking inventory: {e}")
+            self.log.warning("Error checking inventory: %s", e)
             return False
     @control.guard
     def deposit_paydirt(self):
@@ -298,13 +298,13 @@ class BotExecutor(Bot):
             count = len(pay_dirt)
             
             # Check if depositing would exceed hopper capacity
-            if self.hopper_count + count > self.cfg.sack_size.value:
-                self.log.warning(f"Hopper nearly full ({self.hopper_count}/{self.cfg.sack_size.value}). Depositing would exceed capacity.")
+            if self.hopper_count + count > self.cfg.sack_size:
+                self.log.warning("Hopper nearly full (%d/%d). Depositing would exceed capacity.", self.hopper_count, self.cfg.sack_size)
                 return False
             
             # Click on the hopper
             self.client.smart_click_tile(
-                self.cfg.hopper_tile.value,
+                self.cfg.hopper_tile,
                 ['deposit', 'hopper'],
                 retry_hover=3,
                 retry_match=2
@@ -318,11 +318,11 @@ class BotExecutor(Bot):
             
             # Update hopper count
             self.hopper_count += count
-            self.log.info(f"Deposited {count} pay-dirt. Hopper now at {self.hopper_count}/{self.cfg.sack_size.value}")
+            self.log.info("Deposited %d pay-dirt. Hopper now at %d/%d", count, self.hopper_count, self.cfg.sack_size)
             
             return True
         except Exception as e:
-            self.log.error(f"Error depositing Pay-dirt: {e}")
+            self.log.error("Error depositing Pay-dirt: %s", e)
             return False
     @control.guard
     def climb_down_ladder(self):
@@ -336,7 +336,7 @@ class BotExecutor(Bot):
         try:
             # Click on the down ladder (orange)
             self.client.smart_click_tile(
-                self.cfg.down_ladder_tile.value,
+                self.cfg.down_ladder_tile,
                 ['climb', 'ladder'],
                 retry_hover=3,
                 retry_match=3
@@ -351,7 +351,7 @@ class BotExecutor(Bot):
             
             return True
         except Exception as e:
-            self.log.error(f"Error climbing down ladder: {e}")
+            self.log.error("Error climbing down ladder: %s", e)
             return False
     @control.guard
     def search_sack(self):
@@ -365,7 +365,7 @@ class BotExecutor(Bot):
         try:
             # Click on the sack
             self.client.smart_click_tile(
-                self.cfg.sack_tile.value,
+                self.cfg.sack_tile,
                 ['search', 'sack'],
                 retry_hover=3,
                 retry_match=10
@@ -379,11 +379,11 @@ class BotExecutor(Bot):
             
             # Reset hopper count since we've emptied the sack
             self.hopper_count = 0
-            self.log.info(f"Emptied sack. Hopper count reset to 0/{self.cfg.sack_size.value}")
+            self.log.info("Emptied sack. Hopper count reset to 0/%d", self.cfg.sack_size)
             
             return True
         except Exception as e:
-            self.log.error(f"Error searching sack: {e}")
+            self.log.error("Error searching sack: %s", e)
             return False
     @control.guard
     def bank_ore(self):
@@ -397,7 +397,7 @@ class BotExecutor(Bot):
         try:
             # Click on the bank
             self.client.smart_click_tile(
-                self.cfg.bank_tile.value,
+                self.cfg.bank_tile,
                 ['bank', 'deposit'],
                 retry_hover=3,
                 retry_match=10
@@ -422,7 +422,7 @@ class BotExecutor(Bot):
                         min_confidence=0.9
                     )
                 except Exception as e:
-                    self.log.error(f"{e}")
+                    self.log.error("%s", e)
                     self.log.warning("Deposit button not found, retrying...")
                     continue
                     
@@ -438,7 +438,7 @@ class BotExecutor(Bot):
             return False
                 
         except Exception as e:
-            self.log.error(f"Error banking ore: {e}")
+            self.log.error("Error banking ore: %s", e)
             return False
     @control.guard
     def climb_up_ladder(self):
@@ -449,11 +449,11 @@ class BotExecutor(Bot):
             self.log.warning("Already upstairs. Skipping climb up.")
             return True
         
-        for attempt in range(self.cfg.max_retries.value):
+        for attempt in range(self.cfg.max_retries):
             try:
                 # Click on the up ladder (cyan)
                 self.client.smart_click_tile(
-                    self.cfg.up_ladder_tile.value,
+                    self.cfg.up_ladder_tile,
                     ['climb', 'ladder'],
                     retry_hover=3,
                     retry_match=3
@@ -468,8 +468,8 @@ class BotExecutor(Bot):
                 
                 return True
             except Exception as e:
-                self.log.warning(f"Error climbing up ladder (attempt {attempt+1}/{self.cfg.max_retries.value}): {e}")
-                time.sleep(self.cfg.fail_retry_delay.value)
+                self.log.warning("Error climbing up ladder (attempt %d/%d): %s", attempt+1, self.cfg.max_retries, e)
+                time.sleep(self.cfg.fail_retry_delay)
                 
         self.log.error("Failed to climb up ladder after all retries")
         return False

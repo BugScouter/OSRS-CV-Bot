@@ -1,9 +1,7 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam
+from bots.core.cfg_types import RangeParam, BreakCfgParam
 from core.bot import Bot
 
-from core import tools
-from core.region_match import MatchResult
 from core.osrs_client import ToolplaneTab
 
 
@@ -15,14 +13,14 @@ import pyautogui
 class BotConfig(BotConfigMixin):
     # Configuration parameters
 
-    alch_item: IntParam = IntParam(1396)  # Default to water battlestaff (noted)
-    chance_change_point: FloatParam = FloatParam(0.08)
+    alch_item: int = 1396  # Default to water battlestaff (noted)
+    chance_change_point: float = 0.08
 
     # makes it more human-like
     tab_check_range = RangeParam(.5,1.75)
     break_cfg: BreakCfgParam = BreakCfgParam(
         RangeParam(30, 75),  # break duration range in seconds
-        FloatParam(0.01)  # break chance
+        0.01  # break chance
     )
 
 
@@ -37,9 +35,7 @@ class BotExecutor(Bot):
         super().__init__(user, break_cfg=config.break_cfg)
         self.cfg: BotConfig = config
         
-
-
-        self.overlap: MatchResult = None
+        self.overlap = None
         self.overlap_point = None
         self.alch_count = 0
         
@@ -48,7 +44,7 @@ class BotExecutor(Bot):
         self.alch_count = min(nattys, items)
         print(f'Found {nattys} nature runes and {items} items to alch. Alching {self.alch_count} times.')
         
-        self.find_overlap(self.cfg.alch_item.value)
+        self.find_overlap(self.cfg.alch_item)
         self.get_overlap_point()
         self.loop()
 
@@ -65,7 +61,7 @@ class BotExecutor(Bot):
 
             self.control.propose_break()
 
-            if random.random() < self.cfg.chance_change_point.value:
+            if random.random() < self.cfg.chance_change_point:
                 self.get_overlap_point()
 
             alched = self.alch_count - (i + 1)
@@ -74,10 +70,7 @@ class BotExecutor(Bot):
 
     def init(self):
         natty_count = self.client.get_item_cnt('Nature rune',min_confidence=.9)
-        item_count = self.client.get_item_cnt(
-            self.cfg.alch_item.value, 
-            min_confidence=.9
-        )
+        item_count = self.client.get_item_cnt(self.cfg.alch_item, min_confidence=.9)
         return natty_count, item_count
     
     def get_active_tab(self) -> ToolplaneTab:
@@ -88,9 +81,9 @@ class BotExecutor(Bot):
         try:
             
             self.overlap_point = self.overlap.get_point_within()
-            self.log.info(f'New Overlap point: {self.overlap_point}')
-        except AttributeError:
-            raise RuntimeError('Make sure the item and high alch are on top of each other')
+            self.log.info('New Overlap point: %s', self.overlap_point)
+        except AttributeError as exc:
+            raise RuntimeError('Make sure the item and high alch are on top of each other') from exc
         
     
     def find_overlap(self, identifier):

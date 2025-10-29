@@ -1,5 +1,5 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam,StringListParam
+from bots.core.cfg_types import RangeParam, BreakCfgParam, RGBParam
 from core.bot import Bot
 
 from core import tools
@@ -17,23 +17,19 @@ import pyautogui
 class BotConfig(BotConfigMixin):
     # Configuration parameters
 
-    mixer_tile: RGBParam = RGBParam(255, 110, 50)
-    station_tile: RGBParam = RGBParam(153, 255, 221)
-    quick_action_tile: RGBParam = RGBParam(255, 0, 255)
-    conveyor_tile: RGBParam = RGBParam(125, 0, 255)
-    digweed_tile: RGBParam = RGBParam(0, 255, 255)
-    hopper_tile: RGBParam = RGBParam(255, 0 , 40)
-    ingredient_exclude: StringListParam = StringListParam(
-        []#['lll', 'all','mll'] #[ 'aaa', 'mmm', 'mma', 'aam' ] # 'mmm', 'mma',
-    )
-    digweed_potions: StringListParam = StringListParam(
-        ["Marley's MoonLight"]
-    )
+    mixer_tile: RGBParam = RGBParam.from_tuple((255, 110, 50))
+    station_tile: RGBParam = RGBParam.from_tuple((153, 255, 221))
+    quick_action_tile: RGBParam = RGBParam.from_tuple((255, 0, 255))
+    conveyor_tile: RGBParam = RGBParam.from_tuple((125, 0, 255))
+    digweed_tile: RGBParam = RGBParam.from_tuple((0, 255, 255))
+    hopper_tile: RGBParam = RGBParam.from_tuple((255, 0, 40))
+    ingredient_exclude: list[str] = []  # e.g., ['lll', 'all','mll']
+    digweed_potions: list[str] = ["Marley's MoonLight"]
 
 
     break_cfg: BreakCfgParam = BreakCfgParam(
         RangeParam(15, 45),  # break duration range in seconds
-        FloatParam(0.01)  # break chance
+        0.01  # break chance
     )
 
 
@@ -55,7 +51,7 @@ class BotExecutor(Bot):
             station_tile=self.cfg.station_tile,
             quick_action_tile=self.cfg.quick_action_tile,
             digweed_tile=self.cfg.digweed_tile,
-            ingredient_exclude=self.cfg.ingredient_exclude.value,
+            ingredient_exclude=self.cfg.ingredient_exclude,
         )
     
     def start(self):
@@ -106,10 +102,7 @@ class BotExecutor(Bot):
         if not digweed:
             return
         
-        pots = self.client.get_inv_items(
-            self.cfg.digweed_potions.value,
-            min_confidence=.9
-        )
+        pots = self.client.get_inv_items(self.cfg.digweed_potions, min_confidence=.9)
 
         if not pots:
             return
@@ -124,10 +117,7 @@ class BotExecutor(Bot):
         err_cnt = 0
         finished_pots = len(self.mixer.inv_finished_potions())
         while finished_pots:
-            self.client.smart_click_tile(
-                self.cfg.conveyor_tile.value, 
-                ['fufil', 'order', 'conveyor', 'belt']
-            )
+            self.client.smart_click_tile(self.cfg.conveyor_tile, ['fufil', 'order', 'conveyor', 'belt'])
             while self.client.is_moving(): continue
             tmp = self.mixer.inv_finished_potions()
             if len(tmp) == finished_pots:
@@ -153,10 +143,7 @@ class BotExecutor(Bot):
             return False
         
         self.log.info("Filling ingredients...")
-        self.client.smart_click_tile(
-            self.cfg.hopper_tile.value, 
-            ['deposit', 'hopper']
-        )
+        self.client.smart_click_tile(self.cfg.hopper_tile, ['deposit', 'hopper'])
         while self.client.is_moving(): continue
         return True
         
