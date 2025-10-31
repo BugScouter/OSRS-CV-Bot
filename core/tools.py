@@ -11,6 +11,7 @@ from functools import wraps
 from core import cv_debug
 from io import BytesIO
 import base64
+from core.logger import get_logger
 
 
 
@@ -365,37 +366,50 @@ def text_similarity(basetext: str, subtext: str) -> float:
     
     return best_ratio
 
-def timeit(func):
-    """Improved decorator that shows ClassName.method only when the call
-    truly originates from that class (instance or @classmethod)."""
-    qual_parts = func.__qualname__.split(".")
-    cls_name   = qual_parts[-2] if len(qual_parts) > 1 else None
-    cls_obj    = None                     # resolved lazily
+def timeit(func=None, *, do_log: bool = False):
+    """Decorator usable as @timeit or @timeit(do_log=True).
 
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        nonlocal cls_obj
+    Shows ClassName.method only when the call truly originates from that class
+    (instance or @classmethod).
+    """
+    log = get_logger("timeit")
 
-        # Resolve the class object the first time we actually get called
-        if cls_obj is None and cls_name:
-            mod = inspect.getmodule(func)
-            cls_obj = getattr(mod, cls_name, None)
+    def _decorate(f):
+        qual_parts = f.__qualname__.split(".")
+        cls_name   = qual_parts[-2] if len(qual_parts) > 1 else None
+        cls_obj    = None  # resolved lazily
 
-        start = time.time()
-        try:
-            return func(*args, **kwargs)
-        finally:
-            dur   = time.time() - start
-            first = args[0] if args else None
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            nonlocal cls_obj
 
-            if cls_obj and first is not None and (first is cls_obj or isinstance(first, cls_obj)):
-                label = f"{cls_name}.{func.__name__}"
-            else:
-                label = func.__name__
+            # Resolve the class object the first time we actually get called
+            if cls_obj is None and cls_name:
+                mod = inspect.getmodule(f)
+                cls_obj = getattr(mod, cls_name, None)
 
-            # print(f"{label} took {dur:.4f} s")
+            start = time.time()
+            try:
+                return f(*args, **kwargs)
+            finally:
+                dur   = time.time() - start
+                first = args[0] if args else None
 
-    return wrapper
+                if cls_obj and first is not None and (first is cls_obj or isinstance(first, cls_obj)):
+                    label = f"{cls_name}.{f.__name__}"
+                else:
+                    label = f.__name__
+
+                if do_log:
+                    log.debug("%s took %.3f seconds", label, dur)
+
+        return wrapper
+
+    # Called as @timeit without parens
+    if callable(func):
+        return _decorate(func)
+    # Called as @timeit(...)
+    return _decorate
 
 def seconds_to_hms(total_seconds: float | int) -> str:
     """
