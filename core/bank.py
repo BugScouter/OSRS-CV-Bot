@@ -67,9 +67,7 @@ class BankInterface:
             self.client.click(search_box)
             keyboard.write(item_name,delay=.2)
             return True
-        
-    
-        
+
     def close(self):
         if not self.is_open: return
         close_btn = self.client.find_in_window(
