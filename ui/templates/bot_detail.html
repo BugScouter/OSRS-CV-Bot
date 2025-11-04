@@ -1,0 +1,1237 @@
+{% extends "base.html" %}
+
+{% block title %}{{ bot.name }} - OSRS Bot Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1">
+                    <i class="fas fa-robot"></i> {{ bot.name }}
+                </h1>
+                <p class="text-muted">{{ bot.description }}</p>
+            </div>
+            <div>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Configuration Section -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-cogs"></i> Bot Configuration
+                </h5>
+                <div class="btn-group">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="loadDefaultConfig()">
+                        <i class="fas fa-undo"></i> Reset to Defaults
+                    </button>
+                    <button class="btn btn-outline-info btn-sm" onclick="exportConfig()">
+                        <i class="fas fa-download"></i> Export Config
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" onclick="importConfig()">
+                        <i class="fas fa-upload"></i> Import Config
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="bot-config-form">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="username" class="form-label">Username (Optional)</label>
+                            <input type="text" class="form-control" id="username" name="username" 
+                                   placeholder="RuneLite username">
+                            <div class="form-text">Optional username for RuneLite client connection</div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <!-- Dynamic configuration parameters -->
+                    <div id="config-parameters">
+                        {% for param_name, param_info in bot.config_params.items() %}
+                        <div class="row mb-3" data-param="{{ param_name }}">
+                            <div class="col-md-3">
+                                <label class="param-label">{{ param_info.description }}</label>
+                                <div class="param-type">{{ param_info.type }}</div>
+                            </div>
+                            <div class="col-md-9">
+                                {% if param_info.type == 'RGB' %}
+                                    <!-- RGB Parameter -->
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <label class="form-label">Red</label>
+                                            <input type="number" class="form-control" name="{{ param_name }}_r" 
+                                                   min="0" max="255" value="{{ param_info.value[0] }}">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Green</label>
+                                            <input type="number" class="form-control" name="{{ param_name }}_g" 
+                                                   min="0" max="255" value="{{ param_info.value[1] }}">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Blue</label>
+                                            <input type="number" class="form-control" name="{{ param_name }}_b" 
+                                                   min="0" max="255" value="{{ param_info.value[2] }}">
+                                        </div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <div class="d-flex align-items-center">
+                                            <div class="color-preview me-2" style="width: 30px; height: 30px; border: 1px solid #ddd; background-color: rgb({{ param_info.value[0] }}, {{ param_info.value[1] }}, {{ param_info.value[2] }});"></div>
+                                            <input type="color" class="form-control form-control-color" name="{{ param_name }}_color" 
+                                                   value="#{{ '%02x%02x%02x'|format(param_info.value[0], param_info.value[1], param_info.value[2]) }}"
+                                                   onchange="updateRGBFromColor('{{ param_name }}', this.value)">
+                                        </div>
+                                    </div>
+                                
+                                {% elif param_info.type == 'Range' %}
+                                    <!-- Range Parameter -->
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Minimum</label>
+                                            <input type="number" class="form-control" name="{{ param_name }}_min" 
+                                                   step="0.1" value="{{ param_info.value[0] }}">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Maximum</label>
+                                            <input type="number" class="form-control" name="{{ param_name }}_max" 
+                                                   step="0.1" value="{{ param_info.value[1] }}">
+                                        </div>
+                                    </div>
+                                
+                                {% elif param_info.type == 'BreakCfg' %}
+                                    <!-- Break Configuration Parameter -->
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <label class="form-label">Min Break Duration (s)</label>
+                                            <input type="number" class="form-control" name="{{ param_name }}_break_min" 
+                                                   step="1" value="{{ param_info.value[0][0] }}">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Max Break Duration (s)</label>
+                                            <input type="number" class="form-control" name="{{ param_name }}_break_max" 
+                                                   step="1" value="{{ param_info.value[0][1] }}">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Break Chance</label>
+                                            <input type="number" class="form-control" name="{{ param_name }}_break_chance" 
+                                                   step="0.001" min="0" max="1" value="{{ param_info.value[1] }}">
+                                        </div>
+                                    </div>
+                                
+                                {% elif param_info.type == 'Item' %}
+                                    <!-- Item Parameter -->
+                                    <div class="item-param-container">
+                                        {% if param_info.value and param_info.value.icon_b64 %}
+                                        <div class="current-item-display mb-2 p-2 bg-dark rounded border">
+                                            <div class="d-flex align-items-center">
+                                                <img src="data:image/png;base64,{{ param_info.value.icon_b64 }}" 
+                                                     class="item-param-icon me-2" 
+                                                     alt="{{ param_info.value.name }} icon">
+                                                <div>
+                                                    <div class="fw-bold">{{ param_info.value.name }}</div>
+                                                    <div class="text-muted small">ID: {{ param_info.value.id }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" name="{{ param_name }}_name" 
+                                                   value="{{ param_info.value.name if param_info.value else '' }}" 
+                                                   placeholder="Item name" readonly>
+                                            <input type="hidden" name="{{ param_name }}_id" 
+                                                   value="{{ param_info.value.id if param_info.value else '' }}">
+                                            <button class="btn btn-outline-primary" type="button" 
+                                                    onclick="searchItem('{{ param_name }}')">
+                                                <i class="fas fa-search"></i> Browse Items
+                                            </button>
+                                        </div>
+                                    </div>
+                                
+                                {% else %}
+                                    <!-- Generic parameter (String, Int, Float, Boolean) -->
+                                    {% if param_info.type == 'Boolean' %}
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="{{ param_name }}" 
+                                                   {% if param_info.value %}checked{% endif %}>
+                                            <label class="form-check-label">
+                                                Enable {{ param_info.description }}
+                                            </label>
+                                        </div>
+                                    {% else %}
+                                        <input type="{{ 'number' if param_info.type in ['Int', 'Float'] else 'text' }}" 
+                                               class="form-control" name="{{ param_name }}" 
+                                               value="{{ param_info.value }}"
+                                               {% if param_info.type == 'Float' %}step="0.1"{% endif %}>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <button type="button" class="btn btn-success btn-lg" id="start-bot-btn"
+                                    {% if is_running %}disabled{% endif %}>
+                                <i class="fas fa-play"></i> Start Bot
+                            </button>
+                            {% if is_running %}
+                                <button type="button" class="btn btn-danger btn-lg ms-2" onclick="stopBot()">
+                                    <i class="fas fa-stop"></i> Stop Bot
+                                </button>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-primary" onclick="saveConfig()">
+                                <i class="fas fa-save"></i> Save Configuration
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status & Control Section -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-bar"></i> Bot Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="bot-status" class="text-center">
+                    {% if is_running %}
+                        <div class="mb-3">
+                            <h4 class="text-success">
+                                <i class="fas fa-circle"></i> Running
+                            </h4>
+                        </div>
+                        <div class="row text-center">
+                            <div class="col-12 mb-2">
+                                <strong>Runtime:</strong>
+                                <div id="runtime-display">{{ "%.1f"|format(status.runtime or 0) }}s</div>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            {% if status.status == 'running' %}
+                                <button class="btn btn-warning" onclick="pauseBot()">
+                                    <i class="fas fa-pause"></i> Pause Bot
+                                </button>
+                            {% elif status.status == 'paused' %}
+                                <button class="btn btn-success" onclick="resumeBot()">
+                                    <i class="fas fa-play"></i> Resume Bot
+                                </button>
+                            {% endif %}
+                            <button class="btn btn-danger" onclick="stopBot()">
+                                <i class="fas fa-stop"></i> Stop Bot
+                            </button>
+                        </div>
+                    {% else %}
+                        <div class="mb-3">
+                            <h4 class="text-muted">
+                                <i class="fas fa-circle"></i> Not Running
+                            </h4>
+                        </div>
+                        <p class="text-muted">Configure the bot above and click Start Bot to begin</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bot Information -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> Bot Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-4">Bot ID:</dt>
+                    <dd class="col-sm-8"><code>{{ bot.id }}</code></dd>
+                    
+                    <dt class="col-sm-4">Module:</dt>
+                    <dd class="col-sm-8"><code>{{ bot.module_name }}</code></dd>
+                    
+                    <dt class="col-sm-4">Parameters:</dt>
+                    <dd class="col-sm-8">{{ bot.config_params|length }} configured</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden file input for config import -->
+<input type="file" id="config-import-input" style="display: none;" accept=".json" onchange="handleConfigImport(event)">
+{% endblock %}
+
+{% block scripts %}
+<script>
+console.log('Bot detail script loading...');
+const botId = '{{ bot.id }}';
+console.log('Bot ID:', botId);
+let statusUpdateInterval;
+
+// Start status updates if bot is running
+{% if is_running %}
+statusUpdateInterval = setInterval(updateBotStatus, 2000);
+{% endif %}
+
+// Add event listener for start bot button
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, adding event listeners...');
+    const startButton = document.getElementById('start-bot-btn');
+    if (startButton) {
+        console.log('Found start button, adding click listener');
+        startButton.addEventListener('click', function(e) {
+            console.log('Start button clicked via event listener!');
+            e.preventDefault();
+            startBot();
+        });
+    } else {
+        console.log('Start button not found');
+    }
+});
+
+function updateBotStatus() {
+    fetch(`/api/bot/${botId}/status`)
+        .then(response => response.json())
+        .then(data => {
+            const runtimeDisplay = document.getElementById('runtime-display');
+            if (runtimeDisplay && data.runtime) {
+                runtimeDisplay.textContent = `${data.runtime.toFixed(1)}s`;
+            }
+            
+            // Update UI based on status
+            const statusElement = document.getElementById('bot-status');
+            if (data.status === 'not_running' || data.status === 'terminated') {
+                clearInterval(statusUpdateInterval);
+                location.reload();
+            }
+        })
+        .catch(console.error);
+}
+
+let startingBot = false;
+
+function startBot() {
+    console.log('startBot() called');
+    
+    if (startingBot) {
+        console.log('Bot is already being started, ignoring duplicate call');
+        return;
+    }
+    
+    startingBot = true;
+    console.log('botId:', botId);
+    
+    const config = gatherConfiguration();
+    console.log('config:', config);
+    
+    const username = document.getElementById('username').value;
+    console.log('username:', username);
+    
+    const requestData = {
+        config: config,
+        username: username
+    };
+    console.log('Sending request to:', `/api/bot/${botId}/start`);
+    console.log('Request data:', requestData);
+    
+    fetch(`/api/bot/${botId}/start`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Response data:', data);
+        if (data.success) {
+            // Navigate to the running bot monitor page
+            window.location.href = '/running';
+        } else {
+            alert('Failed to start bot: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert(`Error starting bot: ${error.message}`);
+    })
+    .finally(() => {
+        startingBot = false;
+    });
+}
+
+function stopBot() {
+    if (!confirm('Are you sure you want to stop this bot?')) {
+        return;
+    }
+    
+    fetch(`/api/bot/${botId}/stop`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            clearInterval(statusUpdateInterval);
+            location.reload();
+        } else {
+            alert('Failed to stop bot');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert(`Error stopping bot: ${error.message}`);
+    });
+}
+
+function pauseBot() {
+    controlBot('pause', true);
+}
+
+function resumeBot() {
+    controlBot('pause', false);
+}
+
+function controlBot(action, value) {
+    fetch(`/api/bot/${botId}/control`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            action: action,
+            value: value
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            setTimeout(updateBotStatus, 1000);
+        } else {
+            alert(`Failed to ${action} bot`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert(`Error controlling bot: ${error.message}`);
+    });
+}
+
+function gatherConfiguration() {
+    const config = {};
+    const form = document.getElementById('bot-config-form');
+    const formData = new FormData(form);
+    
+    // Process form data based on parameter types
+    {% for param_name, param_info in bot.config_params.items() %}
+    {% if param_info.type == 'RGB' %}
+        config['{{ param_name }}'] = {
+            type: 'RGB',
+            value: [
+                parseInt(formData.get('{{ param_name }}_r')) || 0,
+                parseInt(formData.get('{{ param_name }}_g')) || 0,
+                parseInt(formData.get('{{ param_name }}_b')) || 0
+            ]
+        };
+    {% elif param_info.type == 'Range' %}
+        config['{{ param_name }}'] = {
+            type: 'Range',
+            value: [
+                parseFloat(formData.get('{{ param_name }}_min')) || 0,
+                parseFloat(formData.get('{{ param_name }}_max')) || 0
+            ]
+        };
+    {% elif param_info.type == 'BreakCfg' %}
+        config['{{ param_name }}'] = {
+            type: 'BreakCfg',
+            value: [
+                [
+                    parseFloat(formData.get('{{ param_name }}_break_min')) || 0,
+                    parseFloat(formData.get('{{ param_name }}_break_max')) || 0
+                ],
+                parseFloat(formData.get('{{ param_name }}_break_chance')) || 0
+            ]
+        };
+    {% elif param_info.type == 'Item' %}
+        const itemId_{{ param_name }} = formData.get('{{ param_name }}_id');
+        const itemName_{{ param_name }} = formData.get('{{ param_name }}_name');
+        if (itemId_{{ param_name }}) {
+            config['{{ param_name }}'] = {
+                type: 'Item',
+                value: { id: parseInt(itemId_{{ param_name }}) }
+            };
+        } else if (itemName_{{ param_name }}) {
+            config['{{ param_name }}'] = {
+                type: 'Item',
+                value: { name: itemName_{{ param_name }} }
+            };
+        }
+    {% elif param_info.type == 'Boolean' %}
+        config['{{ param_name }}'] = formData.has('{{ param_name }}');
+    {% elif param_info.type == 'Int' %}
+        const value_{{ param_name }} = formData.get('{{ param_name }}');
+        config['{{ param_name }}'] = parseInt(value_{{ param_name }}) || 0;
+    {% elif param_info.type == 'Float' %}
+        const value_{{ param_name }} = formData.get('{{ param_name }}');
+        config['{{ param_name }}'] = parseFloat(value_{{ param_name }}) || 0;
+    {% elif param_info.type == 'String' %}
+        const value_{{ param_name }} = formData.get('{{ param_name }}');
+        config['{{ param_name }}'] = value_{{ param_name }} || '';
+    {% endif %}
+    {% endfor %}
+    
+    return config;
+}
+
+function updateRGBFromColor(paramName, colorValue) {
+    // Convert hex color to RGB
+    const r = parseInt(colorValue.slice(1, 3), 16);
+    const g = parseInt(colorValue.slice(3, 5), 16);
+    const b = parseInt(colorValue.slice(5, 7), 16);
+    
+    document.querySelector(`input[name="${paramName}_r"]`).value = r;
+    document.querySelector(`input[name="${paramName}_g"]`).value = g;
+    document.querySelector(`input[name="${paramName}_b"]`).value = b;
+    
+    // Update color preview
+    const preview = document.querySelector(`[data-param="${paramName}"] .color-preview`);
+    if (preview) {
+        preview.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+    }
+}
+
+function saveConfig() {
+    const config = gatherConfiguration();
+    
+    fetch(`/api/bot/${botId}/config`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(config)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Configuration saved successfully!');
+        } else {
+            alert('Failed to save configuration');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert(`Error saving configuration: ${error.message}`);
+    });
+}
+
+function loadDefaultConfig() {
+    if (!confirm('This will reset all configuration to default values. Continue?')) {
+        return;
+    }
+    
+    fetch(`/api/bot/${botId}/config`)
+        .then(response => response.json())
+        .then(config => {
+            // Populate form with default configuration
+            // This is a simplified implementation - you may want to enhance this
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert(`Error loading default configuration: ${error.message}`);
+        });
+}
+
+function exportConfig() {
+    const config = gatherConfiguration();
+    const dataStr = JSON.stringify(config, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `${botId}_config.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+}
+
+function importConfig() {
+    document.getElementById('config-import-input').click();
+}
+
+function handleConfigImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const config = JSON.parse(e.target.result);
+            // TODO: Populate form with imported configuration
+            alert('Configuration imported successfully! Please refresh the page.');
+        } catch (error) {
+            alert('Error parsing configuration file: ' + error.message);
+        }
+    };
+    reader.readAsText(file);
+}
+        <div class="modal fade" id="itemPickerModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content bg-dark">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-search"></i> Select Item
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fas fa-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="itemPickerSearch" 
+                                       placeholder="Search for items..." value="${initialQuery}">
+                            </div>
+                        </div>
+                        <div id="itemPickerStatus" class="text-muted small mb-3">
+                            Enter a search term to find items
+                        </div>
+                        <div id="itemPickerResults" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Results will be populated here -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if present
+    const existingModal = document.getElementById('itemPickerModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Initialize modal
+    const modal = new bootstrap.Modal(document.getElementById('itemPickerModal'));
+    const searchInput = document.getElementById('itemPickerSearch');
+    let searchTimeout = null;
+    
+    // Search functionality
+    function performItemSearch() {
+        const query = searchInput.value.trim();
+        if (!query) {
+            document.getElementById('itemPickerResults').innerHTML = '';
+            document.getElementById('itemPickerStatus').textContent = 'Enter a search term to find items';
+            return;
+        }
+        
+        document.getElementById('itemPickerStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+        
+        fetch(`/api/items/search?q=${encodeURIComponent(query)}&limit=20`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayItemPickerResults(data.results, paramName, modal);
+                    document.getElementById('itemPickerStatus').textContent = 
+                        data.results.length > 0 ? 
+                        `Found ${data.results.length} item${data.results.length !== 1 ? 's' : ''}` :
+                        'No items found';
+                } else {
+                    document.getElementById('itemPickerResults').innerHTML = '';
+                    document.getElementById('itemPickerStatus').innerHTML = 
+                        `<span class="text-danger"><i class="fas fa-exclamation-triangle"></i> Error: ${data.error}</span>`;
+                }
+            })
+            .catch(error => {
+                document.getElementById('itemPickerResults').innerHTML = '';
+                document.getElementById('itemPickerStatus').innerHTML = 
+                    `<span class="text-danger"><i class="fas fa-exclamation-triangle"></i> Network error</span>`;
+            });
+    }
+    
+    // Search input handler
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(performItemSearch, 300);
+    });
+    
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            clearTimeout(searchTimeout);
+            performItemSearch();
+        }
+    });
+    
+    // Show modal and focus search
+    modal.show();
+    setTimeout(() => searchInput.focus(), 100);
+    
+    // Perform initial search if query provided
+    if (initialQuery) {
+        setTimeout(performItemSearch, 100);
+    }
+};
+
+// Global function to display search results in the modal
+window.displayItemPickerResults = function(items, paramName, modal) {
+    const resultsContainer = document.getElementById('itemPickerResults');
+    
+    if (items.length === 0) {
+        resultsContainer.innerHTML = '<div class="text-center py-4 text-muted">No items found</div>';
+        return;
+    }
+    
+    resultsContainer.innerHTML = items.map(item => `
+        <div class="card mb-2 item-picker-result" 
+             style="cursor: pointer; transition: all 0.2s ease;" 
+             onclick="selectItemForParam('${paramName}', ${item.id}, '${item.name.replace(/'/g, "\\'")}', modal)">
+            <div class="card-body py-2">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        ${item.icon_b64 ? 
+                            `<img src="data:image/png;base64,${item.icon_b64}" 
+                                  style="width: 24px; height: 24px; object-fit: contain; 
+                                         background: #1a1a1a; border-radius: 4px; padding: 2px;"
+                                  alt="${item.name} icon">` :
+                            `<div style="width: 24px; height: 24px; background: #1a1a1a; border-radius: 4px; 
+                                        display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-question text-muted" style="font-size: 0.7rem;"></i>
+                            </div>`
+                        }
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-bold">${item.name}</div>
+                        <div class="text-muted small">ID: ${item.id}</div>
+                    </div>
+                    <div class="text-end">
+                        <div class="d-flex gap-1">
+                            ${item.tradeable_on_ge ? '<span class="badge bg-success" style="font-size: 0.6rem;">GE</span>' : ''}
+                            ${item.members ? '<span class="badge bg-warning" style="font-size: 0.6rem;">Members</span>' : ''}
+                            ${item.stackable ? '<span class="badge bg-info" style="font-size: 0.6rem;">Stack</span>' : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    // Add hover effects
+    document.querySelectorAll('.item-picker-result').forEach(result => {
+        result.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = 'rgba(77, 171, 247, 0.1)';
+            this.style.borderColor = 'var(--primary-color)';
+        });
+        result.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+            this.style.borderColor = '';
+        });
+    });
+};
+
+// Global function to select an item and update the form
+window.selectItemForParam = function(paramName, itemId, itemName, modal) {
+    // Update the form fields
+    const nameInput = document.querySelector(`input[name="${paramName}_name"]`);
+    const idInput = document.querySelector(`input[name="${paramName}_id"]`);
+    
+    if (nameInput) nameInput.value = itemName;
+    if (idInput) idInput.value = itemId;
+    
+    // Visual feedback
+    if (nameInput) {
+        nameInput.style.borderColor = 'var(--success-color)';
+        setTimeout(() => {
+            nameInput.style.borderColor = '';
+        }, 2000);
+    }
+    
+    // Close modal
+    modal.hide();
+    
+    // Show success message
+    const message = document.createElement('div');
+    message.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    message.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    message.innerHTML = `
+        Selected: <strong>${itemName}</strong> (ID: ${itemId})
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(message);
+    
+    setTimeout(() => {
+        if (message.parentNode) {
+            message.parentNode.removeChild(message);
+        }
+    }, 3000);
+};
+</script>
+
+<!-- Item picker modal functionality -->
+<script>
+// Ensure these functions are globally available
+window.searchItem = window.searchItem || function(paramName) {
+    console.log('searchItem called for:', paramName);
+    const currentName = document.querySelector(`input[name="${paramName}_name"]`).value;
+    window.openItemPicker(paramName, currentName);
+};
+
+window.openItemPicker = window.openItemPicker || function(paramName, initialQuery = '') {
+    console.log('openItemPicker called for:', paramName, 'with query:', initialQuery);
+    
+    // Create modal HTML
+    const modalHtml = `
+        <div class="modal fade" id="itemPickerModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content bg-dark">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-search"></i> Select Item for ${paramName}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fas fa-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="itemPickerSearch" 
+                                       placeholder="Search for items..." value="${initialQuery}">
+                            </div>
+                        </div>
+                        <div id="itemPickerStatus" class="text-muted small mb-3">
+                            Enter a search term to find items
+                        </div>
+                        <div id="itemPickerResults" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Results will be populated here -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if present
+    const existingModal = document.getElementById('itemPickerModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Initialize modal
+    const modal = new bootstrap.Modal(document.getElementById('itemPickerModal'));
+    const searchInput = document.getElementById('itemPickerSearch');
+    let searchTimeout = null;
+    
+    // Search functionality
+    function performItemSearch() {
+        const query = searchInput.value.trim();
+        if (!query) {
+            document.getElementById('itemPickerResults').innerHTML = '';
+            document.getElementById('itemPickerStatus').textContent = 'Enter a search term to find items';
+            return;
+        }
+        
+        document.getElementById('itemPickerStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+        
+        fetch(`/api/items/search?q=${encodeURIComponent(query)}&limit=20`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.length > 0) {
+                    window.displayItemPickerResults(data, paramName, modal);
+                    document.getElementById('itemPickerStatus').textContent = 
+                        `Found ${data.length} item${data.length !== 1 ? 's' : ''}`;
+                } else {
+                    document.getElementById('itemPickerResults').innerHTML = '';
+                    document.getElementById('itemPickerStatus').textContent = 'No items found';
+                }
+            })
+            .catch(error => {
+                console.error('Search error:', error);
+                document.getElementById('itemPickerResults').innerHTML = '';
+                document.getElementById('itemPickerStatus').innerHTML = 
+                    `<span class="text-danger"><i class="fas fa-exclamation-triangle"></i> Search failed</span>`;
+            });
+    }
+    
+    // Search input handler
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(performItemSearch, 300);
+    });
+    
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            clearTimeout(searchTimeout);
+            performItemSearch();
+        }
+    });
+    
+    // Show modal and focus search
+    modal.show();
+    setTimeout(() => searchInput.focus(), 100);
+    
+    // Perform initial search if query provided
+    if (initialQuery) {
+        setTimeout(performItemSearch, 100);
+    }
+};
+
+window.displayItemPickerResults = window.displayItemPickerResults || function(items, paramName, modal) {
+    console.log('displayItemPickerResults called with', items.length, 'items for', paramName);
+    const resultsContainer = document.getElementById('itemPickerResults');
+    
+    if (items.length === 0) {
+        resultsContainer.innerHTML = '<div class="text-center py-4 text-muted">No items found</div>';
+        return;
+    }
+    
+    resultsContainer.innerHTML = items.map(item => `
+        <div class="card mb-2 item-picker-result" 
+             style="cursor: pointer; transition: all 0.2s ease;" 
+             onclick="window.selectItemForParam('${paramName}', ${item.id}, '${item.name.replace(/'/g, "\\'")}', arguments[0])">
+            <div class="card-body py-2">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        ${item.icon ? 
+                            `<img src="data:image/png;base64,${item.icon}" 
+                                  style="width: 24px; height: 24px; object-fit: contain; 
+                                         background: #1a1a1a; border-radius: 4px; padding: 2px;"
+                                  alt="${item.name}">` : 
+                            `<div style="width: 24px; height: 24px; background: #333; border-radius: 4px; 
+                                        display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-cube text-muted" style="font-size: 12px;"></i>
+                             </div>`}
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-bold">${item.name}</div>
+                        <div class="text-muted small">ID: ${item.id}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    // Add hover effects
+    document.querySelectorAll('.item-picker-result').forEach(result => {
+        result.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = 'rgba(77, 171, 247, 0.1)';
+            this.style.borderColor = 'var(--primary-color)';
+        });
+        result.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+            this.style.borderColor = '';
+        });
+        result.addEventListener('click', function() {
+            window.selectItemForParam(paramName, 
+                this.querySelector('.text-muted').textContent.replace('ID: ', ''),
+                this.querySelector('.fw-bold').textContent,
+                modal);
+        });
+    });
+};
+
+window.selectItemForParam = window.selectItemForParam || function(paramName, itemId, itemName, modal) {
+    console.log('selectItemForParam called:', paramName, itemId, itemName);
+    
+    // Update the form fields
+    const nameInput = document.querySelector(`input[name="${paramName}_name"]`);
+    const idInput = document.querySelector(`input[name="${paramName}_id"]`);
+    
+    if (nameInput) nameInput.value = itemName;
+    if (idInput) idInput.value = itemId;
+    
+    // Visual feedback
+    if (nameInput) {
+        nameInput.style.borderColor = '#28a745';
+        setTimeout(() => {
+            nameInput.style.borderColor = '';
+        }, 2000);
+    }
+    
+    // Close modal
+    if (modal && modal.hide) {
+        modal.hide();
+    } else {
+        // Fallback: find and close modal
+        const modalElement = document.getElementById('itemPickerModal');
+        if (modalElement) {
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) modalInstance.hide();
+        }
+    }
+    
+    // Show success message
+    const message = document.createElement('div');
+    message.className = 'alert alert-success position-fixed';
+    message.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    message.innerHTML = `
+        <i class="fas fa-check-circle"></i> 
+        Selected: <strong>${itemName}</strong> for ${paramName}
+    `;
+    document.body.appendChild(message);
+    
+    setTimeout(() => {
+        if (message.parentNode) {
+            message.parentNode.removeChild(message);
+        }
+    }, 3000);
+};
+
+// Debug: Log that functions are loaded
+console.log('Item picker functions loaded:', {
+    searchItem: typeof window.searchItem,
+    openItemPicker: typeof window.openItemPicker,
+    displayItemPickerResults: typeof window.displayItemPickerResults,
+    selectItemForParam: typeof window.selectItemForParam
+});
+</script>
+
+<style>
+.item-param-container {
+    position: relative;
+}
+
+.item-param-icon {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    background: #0d1117;
+    border-radius: 4px;
+    padding: 2px;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+.current-item-display {
+    background: rgba(45, 55, 72, 0.5) !important;
+    border: 1px solid var(--border-color) !important;
+    transition: all 0.2s ease;
+}
+
+.current-item-display:hover {
+    border-color: var(--primary-color) !important;
+    background: rgba(77, 171, 247, 0.1) !important;
+}
+
+.item-picker-modal .modal-content {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+}
+
+.item-picker-modal .modal-header {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #339af0 100%);
+    border-bottom: 1px solid var(--border-color);
+}
+
+#itemPickerSearch {
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+#itemPickerSearch:focus {
+    background: var(--card-bg);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(77, 171, 247, 0.25);
+    color: var(--text-color);
+}
+
+.item-picker-result {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.item-picker-result:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.3);
+}
+</style>
+
+<!-- Final function override to ensure they work -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Force define global functions if they don't exist
+    if (typeof window.searchItem === 'undefined') {
+        window.searchItem = function(paramName) {
+            console.log('searchItem override called for:', paramName);
+            const currentName = document.querySelector(`input[name="${paramName}_name"]`).value || '';
+            
+            // Create and show modal
+            const modalId = 'itemPickerModal_' + paramName;
+            const existingModal = document.getElementById(modalId);
+            if (existingModal) existingModal.remove();
+            
+            const modalHtml = `
+                <div class="modal fade" id="${modalId}" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content bg-dark text-white">
+                            <div class="modal-header">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-search"></i> Select Item for ${paramName}
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <input type="text" class="form-control" id="itemSearch_${paramName}" 
+                                           placeholder="Search for items..." value="${currentName}">
+                                </div>
+                                <div id="searchStatus_${paramName}" class="text-muted small mb-3">
+                                    Enter a search term to find items
+                                </div>
+                                <div id="searchResults_${paramName}" style="max-height: 400px; overflow-y: auto;">
+                                    <!-- Results will appear here -->
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            const modal = new bootstrap.Modal(document.getElementById(modalId));
+            const searchInput = document.getElementById(`itemSearch_${paramName}`);
+            let searchTimeout = null;
+            
+            function performSearch() {
+                const query = searchInput.value.trim();
+                if (!query) {
+                    document.getElementById(`searchResults_${paramName}`).innerHTML = '';
+                    document.getElementById(`searchStatus_${paramName}`).textContent = 'Enter a search term to find items';
+                    return;
+                }
+                
+                document.getElementById(`searchStatus_${paramName}`).innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+                
+                fetch(`/api/items/search?q=${encodeURIComponent(query)}&limit=20`)
+                    .then(response => response.json())
+                    .then(items => {
+                        const resultsDiv = document.getElementById(`searchResults_${paramName}`);
+                        const statusDiv = document.getElementById(`searchStatus_${paramName}`);
+                        
+                        if (items && items.length > 0) {
+                            statusDiv.textContent = `Found ${items.length} items`;
+                            resultsDiv.innerHTML = items.map(item => `
+                                <div class="card mb-2" style="cursor: pointer; background: #2d3748;" 
+                                     onclick="window.selectItem_${paramName}(${item.id}, '${item.name.replace(/'/g, "\\'")}')">
+                                    <div class="card-body py-2">
+                                        <div class="d-flex align-items-center">
+                                            <div class="me-3">
+                                                ${item.icon ? 
+                                                    `<img src="data:image/png;base64,${item.icon}" 
+                                                          style="width: 24px; height: 24px; object-fit: contain; 
+                                                                 background: #1a1a1a; border-radius: 4px; padding: 2px;"
+                                                          alt="${item.name}">` : 
+                                                    `<div style="width: 24px; height: 24px; background: #333; 
+                                                                border-radius: 4px; display: flex; align-items: center; 
+                                                                justify-content: center;">
+                                                        <i class="fas fa-cube text-muted" style="font-size: 12px;"></i>
+                                                     </div>`}
+                                            </div>
+                                            <div>
+                                                <div class="fw-bold text-white">${item.name}</div>
+                                                <div class="text-muted small">ID: ${item.id}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('');
+                            
+                            // Create selection function for this parameter
+                            window[`selectItem_${paramName}`] = function(itemId, itemName) {
+                                const nameInput = document.querySelector(`input[name="${paramName}_name"]`);
+                                const idInput = document.querySelector(`input[name="${paramName}_id"]`);
+                                
+                                if (nameInput) nameInput.value = itemName;
+                                if (idInput) idInput.value = itemId;
+                                
+                                if (nameInput) {
+                                    nameInput.style.borderColor = '#28a745';
+                                    setTimeout(() => nameInput.style.borderColor = '', 2000);
+                                }
+                                
+                                modal.hide();
+                                
+                                // Success message
+                                const msg = document.createElement('div');
+                                msg.className = 'alert alert-success position-fixed';
+                                msg.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                                msg.innerHTML = `<i class="fas fa-check"></i> Selected: <strong>${itemName}</strong>`;
+                                document.body.appendChild(msg);
+                                setTimeout(() => msg.remove(), 3000);
+                            };
+                        } else {
+                            statusDiv.textContent = 'No items found';
+                            resultsDiv.innerHTML = '<div class="text-center py-4 text-muted">No items found</div>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Search failed:', error);
+                        document.getElementById(`searchStatus_${paramName}`).innerHTML = 
+                            '<span class="text-danger"><i class="fas fa-exclamation-triangle"></i> Search failed</span>';
+                    });
+            }
+            
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(performSearch, 300);
+            });
+            
+            searchInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    clearTimeout(searchTimeout);
+                    performSearch();
+                }
+            });
+            
+            modal.show();
+            setTimeout(() => searchInput.focus(), 100);
+            
+            if (currentName) {
+                setTimeout(performSearch, 100);
+            }
+        };
+        
+        console.log('searchItem function defined successfully');
+    }
+});
+</script>
+
+{% endblock %}
