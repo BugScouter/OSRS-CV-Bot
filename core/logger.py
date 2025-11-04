@@ -25,6 +25,10 @@ _ws_event_loop: asyncio.AbstractEventLoop | None = None
 _ws_start_lock = threading.Lock()
 _ws_server_started = False
 
+# Track the actual port the WebSocket server is running on
+_ws_server_port = None
+_ws_server_ready = threading.Event()
+
 # Function to get logger names - will be set by LoggerWrapper
 _get_logger_names = None
 
@@ -169,21 +173,24 @@ class WebSocketLogHandler(logging.Handler):
 # --- Function to start the WebSocket server inside a daemon thread -----------
 # ------------------------------------------------------------------------------
 
-def _start_websocket_server(host: str = "0.0.0.0", port: int = 8765) -> None:
+def _start_websocket_server(host: str = "0.0.0.0", port: int = 18765) -> None:
     """
     This function is intended to run in its own thread. It creates a new
     asyncio loop, starts a simple WebSocket server, and runs forever.
     """
     global _ws_event_loop, _ws_server_started, client_subscriptions
-    with _ws_start_lock:
-        if _ws_server_started:
-            return  # already running
-        _ws_server_started = True
-
-    # Create and set a fresh event loop for this thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    _ws_event_loop = loop
+    
+    try:
+        # Create and set a fresh event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        _ws_event_loop = loop
+    except Exception as e:
+        print(f"[WebSocketLogHandler] Failed to create event loop: {e}")
+        import traceback
+        traceback.print_exc()
+        _ws_server_ready.set()  # Signal that we're done (with error)
+        return
 
     # Client subscriptions - maps websocket to list of loggers they're subscribed to
     # None means "all loggers" (default)
@@ -293,30 +300,85 @@ def _start_websocket_server(host: str = "0.0.0.0", port: int = 8765) -> None:
 
     # Define the WebSocket server startup in an async function
     async def start_server():
-        server = await websockets.serve(ws_handler, host, port)
-        print(f"[WebSocketLogHandler] Running on ws://{host}:{port}/")
-        return server
+        global _ws_server_port
+        # Try multiple ports if the default is in use
+        ports_to_try = [port, port + 1, port + 2, port + 3, port + 4]
+        for try_port in ports_to_try:
+            try:
+                server = await websockets.serve(ws_handler, host, try_port)
+                _ws_server_port = try_port  # Store the actual port being used
+                print(f"[WebSocketLogHandler] Running on ws://{host}:{try_port}/")
+                _ws_server_ready.set()  # Signal that the server is ready
+                return server
+            except OSError as e:
+                if "Only one usage of each socket address" in str(e) or "10048" in str(e):
+                    continue
+                else:
+                    raise e
+        raise OSError(f"Could not bind to any port in range {ports_to_try}")
 
     # Start the WebSocket server
-    server = loop.run_until_complete(start_server())
+    try:
+        server = loop.run_until_complete(start_server())
+    except Exception as e:
+        print(f"[WebSocketLogHandler] Failed to start server: {e}")
+        _ws_server_ready.set()  # Signal that we're done (with error)
+        return
 
     try:
         loop.run_forever()
+    except Exception as e:
+        print(f"[WebSocketLogHandler] Event loop error: {e}")
     finally:
         # Clean up if the loop ever stops
-        server.close()
-        loop.run_until_complete(server.wait_closed())
-        loop.close()
+        try:
+            server.close()
+            loop.run_until_complete(server.wait_closed())
+            loop.close()
+        except Exception as e:
+            print(f"[WebSocketLogHandler] Cleanup error: {e}")
 
 
 def _ensure_ws_thread_started():
     """
     Guarantee that the WebSocket server thread is up and running.
+    Only starts one server instance across all logger instances.
     """
     global _ws_server_started
-    if not _ws_server_started:
-        t = threading.Thread(target=_start_websocket_server, daemon=True)
-        t.start()
+    with _ws_start_lock:
+        if not _ws_server_started:
+            _ws_server_started = True
+            
+            # Wrap the target function to catch any exceptions
+            def safe_start():
+                try:
+                    _start_websocket_server()
+                except Exception as e:
+                    print(f"[WebSocketLogHandler] Thread exception: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    _ws_server_ready.set()  # Signal that we're done (with error)
+            
+            t = threading.Thread(target=safe_start, daemon=True)
+            t.start()
+
+def get_websocket_port() -> Optional[int]:
+    """
+    Get the port the WebSocket log server is running on.
+    Returns None if the server hasn't started yet.
+    """
+    global _ws_server_port
+    return _ws_server_port
+
+def ensure_websocket_server_started() -> None:
+    """
+    Ensure the WebSocket server is started.
+    Can be called multiple times safely.
+    """
+    _ensure_ws_thread_started()
+    # Wait up to 5 seconds for the server to be ready
+    if not _ws_server_ready.wait(timeout=5.0):
+        print("[WebSocketLogHandler] Warning: Server didn't start within 5 seconds")
 
 
 # ------------------------------------------------------------------------------
@@ -341,7 +403,20 @@ class ElapsedTimeFormatter(logging.Formatter):
 default_log_level = logging.DEBUG  # Default log level if not specified
 
 class LoggerWrapper:
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(LoggerWrapper, cls).__new__(cls)
+        return cls._instance
+    
     def __init__(self):
+        # Only initialize once
+        if LoggerWrapper._initialized:
+            return
+        LoggerWrapper._initialized = True
+        
         self._loggers: dict[str, logging.Logger] = {}
         # Set the global functions to access logger data
         global _get_logger_names, _set_logger_level

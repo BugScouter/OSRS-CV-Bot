@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from core.logger import get_logger
 from PIL import Image
 from io import BytesIO
@@ -168,18 +168,95 @@ class ItemLookup:
             return self.get_item_by_name(item)
         return None
 
-    def search_items(self, query: str) -> Dict[int, Item]:
+    def search_items(self, query: str, limit: int = 50) -> Dict[int, Item]:
         """
         Searches for items whose names contain the query string (case-insensitive).
         
-        Returns a dictionary of item IDs and their corresponding items.
+        Returns a dictionary of item IDs and their corresponding items, limited by the limit parameter.
         """
-        query = query.lower()
-        return {
-            item_id: item
-            for item_id, item in self._items_by_id.items()
-            if query in item.name.lower()
-        }
+        if not query or not query.strip():
+            return {}
+            
+        query = query.lower().strip()
+        results = {}
+        count = 0
+        
+        # First pass: exact matches get priority
+        for item_id, item in self._items_by_id.items():
+            if item.name.lower() == query:
+                results[item_id] = item
+                count += 1
+                if count >= limit:
+                    break
+        
+        # Second pass: starts with query
+        if count < limit:
+            for item_id, item in self._items_by_id.items():
+                if item_id not in results and item.name.lower().startswith(query):
+                    results[item_id] = item
+                    count += 1
+                    if count >= limit:
+                        break
+        
+        # Third pass: contains query
+        if count < limit:
+            for item_id, item in self._items_by_id.items():
+                if item_id not in results and query in item.name.lower():
+                    results[item_id] = item
+                    count += 1
+                    if count >= limit:
+                        break
+        
+        return results
+    
+    def search_items_advanced(self, query: str, filters: Dict[str, Any] = None, limit: int = 50) -> List[Item]:
+        """
+        Advanced search with filters and sorting.
+        
+        Args:
+            query: Search term for item name
+            filters: Dictionary of filters (tradeable_on_ge, members, stackable, etc.)
+            limit: Maximum number of results to return
+            
+        Returns:
+            List of Item objects sorted by relevance
+        """
+        if not query or not query.strip():
+            return []
+            
+        # Get basic search results
+        search_results = self.search_items(query, limit * 2)  # Get more for filtering
+        results = list(search_results.values())
+        
+        # Apply filters if provided
+        if filters:
+            filtered_results = []
+            for item in results:
+                include = True
+                for filter_key, filter_value in filters.items():
+                    if hasattr(item, filter_key):
+                        if getattr(item, filter_key) != filter_value:
+                            include = False
+                            break
+                if include:
+                    filtered_results.append(item)
+            results = filtered_results
+        
+        # Sort by relevance (exact match first, then starts with, then contains)
+        query_lower = query.lower()
+        
+        def relevance_score(item):
+            name_lower = item.name.lower()
+            if name_lower == query_lower:
+                return 0  # Exact match - highest priority
+            elif name_lower.startswith(query_lower):
+                return 1  # Starts with - second priority
+            else:
+                return 2  # Contains - lowest priority
+        
+        results.sort(key=relevance_score)
+        
+        return results[:limit]
 
     def list_all_items(self) -> Dict[int, str]:
         """

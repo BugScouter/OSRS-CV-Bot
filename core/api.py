@@ -1,10 +1,11 @@
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, Response
 from flask_cors import CORS
 import time
 import io
 import threading
 from core.control import ScriptControl
 from core.logger import get_logger
+from core import cv_debug
 
 class BotAPI:
     def __init__(self, client=None):
@@ -78,12 +79,73 @@ class BotAPI:
                 'formatted': f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}",
                 'started_at': self.start_time
             })
+        
+        # CV Debug endpoint - proxy to cv_debug server
+        @self.app.route('/debug')
+        def debug_index():
+            """Serve the CV debug interface"""
+            try:
+                # Get the debug port (should already be enabled in bot.py)
+                debug_port = getattr(self, '_debug_port', 5555)
+                
+                # Return a simple redirect/proxy page
+                debug_port = getattr(self, '_debug_port', 5555)
+                return f'''
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>CV Debug</title>
+                    <style>
+                        body {{ margin: 0; padding: 0; background: #111; color: #eee; font-family: sans-serif; }}
+                        .loading {{ text-align: center; padding: 50px; }}
+                        iframe {{ width: 100%; height: 100vh; border: none; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="loading" id="loading">Loading CV Debug...</div>
+                    <iframe id="debug-frame" src="http://localhost:{debug_port}" style="display: none;"></iframe>
+                    <script>
+                        const iframe = document.getElementById('debug-frame');
+                        const loading = document.getElementById('loading');
+                        
+                        iframe.onload = function() {{
+                            loading.style.display = 'none';
+                            iframe.style.display = 'block';
+                        }};
+                        
+                        iframe.onerror = function() {{
+                            loading.innerHTML = 'CV Debug not available. Make sure the bot is running.';
+                        }};
+                        
+                        // Show iframe after a short delay even if onload doesn't fire
+                        setTimeout(() => {{
+                            loading.style.display = 'none';
+                            iframe.style.display = 'block';
+                        }}, 3000);
+                    </script>
+                </body>
+                </html>
+                '''
+            except Exception as e:
+                self.log.error(f"CV Debug error: {e}")
+                return f'''
+                <html>
+                <body style="background: #111; color: #eee; font-family: sans-serif; padding: 50px; text-align: center;">
+                    <h2>CV Debug Unavailable</h2>
+                    <p>Error: {str(e)}</p>
+                    <p>Make sure the bot is properly initialized.</p>
+                </body>
+                </html>
+                ''', 503
     
     def start(self, port=5432):
         """Start the API server in a background thread"""
         if self.thread and self.thread.is_alive():
             self.log.warning("API server is already running")
             return
+        
+        # Store the port for cv_debug use
+        self._api_port = port
             
         def run_server():
             self.log.info(f"Starting API server on port {port}")

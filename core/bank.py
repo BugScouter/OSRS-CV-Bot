@@ -26,7 +26,8 @@ class BankInterface:
         self.client = client
         self.bank_match: tools.MatchResult = None
         self.last_custom_quanity = 0
-        self.log = get_logger('bank')
+        self.log = get_logger('Bank')
+        self._scrollbar_match: tools.MatchResult = None
 
     @property
     def is_open(self):
@@ -66,6 +67,8 @@ class BankInterface:
             self.client.click(search_box)
             keyboard.write(item_name,delay=.2)
             return True
+        
+    
         
     def close(self):
         if not self.is_open: return

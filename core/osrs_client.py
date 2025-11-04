@@ -1298,6 +1298,24 @@ class RuneLiteClient(GenericWindow):
             raise_on_blank=False,
             preprocess=True
         )
+        
+    @property
+    def hover_text(self) -> str:
+        """Get the current hover text from the game interface.
+        tries action hover, falls back to normal hover text if needed.
+
+        Returns:
+            str: The hover text currently displayed.
+        """
+        ans = None
+        try:
+            ans = self.get_action_hover()
+        except:
+            pass
+        
+        if not ans:
+            ans = self.get_hover_text()
+        return ans or ''
     
     @control.guard
     def get_action_hover(self) -> str:
@@ -1321,7 +1339,6 @@ class RuneLiteClient(GenericWindow):
                 c_x - 45, c_y - 20, 
                 c_x + 20, c_y + 45
             )
-            sc = hover_box.debug_draw(sc, color=(255, 0, 0))
 
             start = self.find_in_window(
                 h_start,
