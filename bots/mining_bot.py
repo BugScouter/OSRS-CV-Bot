@@ -1,6 +1,6 @@
 # ruff: noqa: BLE001
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import RouteParam, BreakCfgParam, RangeParam, WaypointParam, RGBParam
+from bots.core.cfg_types import RouteParam, BreakCfgParam, RangeParam, WaypointParam, RGBParam, ItemParam
 from core.bot import Bot
 from core.bank import BankInterface
 from core.osrs_client import ToolplaneTab
@@ -17,8 +17,20 @@ class BotConfig(BotConfigMixin):
 
     # Bank and mining configuration
     bank_tile: RGBParam = RGBParam.from_tuple((0, 255, 0))  # Green by default
-    ore_type: str = "Iron ore"  # Default ore type
+    ore_type: ItemParam = ItemParam("Iron ore")  # Default ore type
     inv_full_at: int = 27  # Default inventory capacity (28 slots)
+    gem_types: list[ItemParam] = [
+        ItemParam("Uncut sapphire"), 
+        ItemParam("Uncut emerald"), 
+        ItemParam("Uncut ruby"), 
+        ItemParam("Uncut diamond"),
+        ItemParam("Uncut dragonstone"),
+        ItemParam("Uncut onyx"),
+        ItemParam("Uncut zenyte"),
+        ItemParam("Uncut opal"),
+        ItemParam("Uncut jade"),
+        ItemParam("Uncut red topaz")
+    ]
     ore_options: list[RGBParam] = [
         # RGBParam.from_tuple((255, 0, 0)),     # Red
         # RGBParam.from_tuple((255, 0, 50)),    # Pink-Red
@@ -61,7 +73,7 @@ class BotExecutor(Bot):
             raise ValueError("bank_to_mine route must be specified")
     
     def start(self):
-        self.log.info("Starting Mining Bot for %s", self.cfg.ore_type)
+        self.log.info("Starting Mining Bot for %s", self.cfg.ore_type.name)
         
         try:
             while True:
@@ -170,7 +182,7 @@ class BotExecutor(Bot):
     
     def mine_until_full(self):
         """Mine ore until inventory has the specified number of ores"""
-        self.log.info("Mining until inventory has %s %s", self.cfg.inv_full_at, self.cfg.ore_type)
+        self.log.info("Mining until inventory has %s %s", self.cfg.inv_full_at, self.cfg.ore_type.name)
         
         failure_count = 0
         
@@ -205,7 +217,7 @@ class BotExecutor(Bot):
                 
                 time.sleep(1)  # Wait before retrying
 
-        self.log.info("Inventory full with %s %s", self.get_ore_count(), self.cfg.ore_type)
+        self.log.info("Inventory full with %s %s", self.get_ore_count(), self.cfg.ore_type.name)
         return True
     
     def drop_gems(self):
@@ -215,21 +227,10 @@ class BotExecutor(Bot):
             self.client.click_toolplane(ToolplaneTab.INVENTORY)
             time.sleep(0.5)
             
-            # Comprehensive list of all possible gems from mining
-            gem_types = [
-                "Uncut sapphire", 
-                "Uncut emerald", 
-                "Uncut ruby", 
-                "Uncut diamond",
-                "Uncut dragonstone",
-                "Uncut onyx",
-                "Uncut zenyte",
-                "Uncut opal",
-                "Uncut jade",
-                "Uncut red topaz"
-            ]
+            # Get gem names from ItemParam list
+            gem_names = [gem.name for gem in self.cfg.gem_types]
             
-            gems = self.client.get_inv_items(gem_types, min_confidence=0.9)
+            gems = self.client.get_inv_items(gem_names, min_confidence=0.9)
             
             if gems:
                 self.log.info("Found %d gems to drop", len(gems))
@@ -269,7 +270,7 @@ class BotExecutor(Bot):
         try:
             self.client.smart_click_tile(
                 current_ore,
-                [ self.cfg.ore_type.split(' ')[0] ],
+                [ self.cfg.ore_type.name.split(' ')[0] ],
                 retry_hover=1,
                 retry_match=1,
                 filter_ui=True
@@ -292,10 +293,10 @@ class BotExecutor(Bot):
             time.sleep(0.3)
             
             # Get all instances of the specified ore type in inventory
-            ore_items = self.client.get_inv_items([self.cfg.ore_type], min_confidence=0.9)
+            ore_items = self.client.get_inv_items([self.cfg.ore_type.name], min_confidence=0.9)
             count = len(ore_items)
             
-            self.log.debug("Found %d %s in inventory", count, self.cfg.ore_type)
+            self.log.debug("Found %d %s in inventory", count, self.cfg.ore_type.name)
             return count
         except (RuntimeError, ValueError, OSError) as e:
             self.log.warning("Error checking inventory: %s", e)

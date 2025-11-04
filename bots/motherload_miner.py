@@ -1,5 +1,5 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import RangeParam, BreakCfgParam, RGBParam
+from bots.core.cfg_types import RangeParam, BreakCfgParam, RGBParam, ItemParam
 from core.bot import Bot
 from core.bank import BankInterface
 
@@ -42,6 +42,15 @@ class BotConfig(BotConfigMixin):
     vein_tile_4: RGBParam = RGBParam.from_tuple((255, 0, 120))
 
     sack_size: int = 189  # Maximum pay-dirt in hopper
+    
+    # Items
+    paydirt_item: ItemParam = ItemParam("Pay-dirt")
+    gem_types: list[ItemParam] = [
+        ItemParam("Uncut emerald"),
+        ItemParam("Uncut ruby"), 
+        ItemParam("Uncut sapphire"),
+        ItemParam("Uncut diamond")
+    ]
     
     # Other action tiles
     hopper_tile: RGBParam = RGBParam.from_tuple((255, 0, 255))
@@ -174,8 +183,8 @@ class BotExecutor(Bot):
             time.sleep(0.5)
             
             # Check for gems
-            gem_types = ["Uncut emerald", "Uncut ruby", "Uncut sapphire", "Uncut diamond"]
-            gems = self.client.get_inv_items(gem_types, min_confidence=0.98)
+            gem_names = [gem.name for gem in self.cfg.gem_types]
+            gems = self.client.get_inv_items(gem_names, min_confidence=0.98)
             
             if gems:
                 self.log.info(f"Found {len(gems)} gems to drop")
@@ -277,7 +286,7 @@ class BotExecutor(Bot):
             time.sleep(0.5)
             
             # Get all Pay-dirt in inventory
-            pay_dirt = self.client.get_inv_items(["Pay-dirt"], min_confidence=0.9)
+            pay_dirt = self.client.get_inv_items([self.cfg.paydirt_item.name], min_confidence=0.9)
             count = len(pay_dirt)
             
             self.log.debug("Found %d Pay-dirt in inventory", count)
@@ -294,7 +303,7 @@ class BotExecutor(Bot):
             # Count the pay-dirt we're about to deposit
             self.client.click_toolplane(ToolplaneTab.INVENTORY)
             time.sleep(0.5)
-            pay_dirt = self.client.get_inv_items(["Pay-dirt"], min_confidence=0.9)
+            pay_dirt = self.client.get_inv_items([self.cfg.paydirt_item.name], min_confidence=0.9)
             count = len(pay_dirt)
             
             # Check if depositing would exceed hopper capacity

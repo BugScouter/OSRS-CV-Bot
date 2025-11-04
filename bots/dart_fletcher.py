@@ -1,5 +1,5 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam
+from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam, ItemParam
 from core.bot import Bot
 
 from core import tools
@@ -14,8 +14,8 @@ from core.logger import get_logger
 class BotConfig(BotConfigMixin):
     # Configuration parameters
 
-    item1: StringParam = StringParam("Mithril dart tip")
-    item2: StringParam = StringParam("Feather")
+    item1: ItemParam = ItemParam("Mithril dart tip")
+    item2: ItemParam = ItemParam("Feather")
     
     # Min confidence for item recognition
     item1_confidence: FloatParam = FloatParam(0.8)
@@ -55,10 +55,10 @@ class BotExecutor(Bot):
         self.get_initial_counts()
         
         if self.initial_item1_count == 0 or self.initial_item2_count == 0:
-            self.log.error(f"Missing required items: {self.cfg.item1.value}={self.initial_item1_count}, {self.cfg.item2.value}={self.initial_item2_count}")
+            self.log.error(f"Missing required items: {self.cfg.item1.name}={self.initial_item1_count}, {self.cfg.item2.name}={self.initial_item2_count}")
             return
             
-        self.log.info(f"Starting with {self.initial_item1_count} {self.cfg.item1.value} and {self.initial_item2_count} {self.cfg.item2.value}")
+        self.log.info(f"Starting with {self.initial_item1_count} {self.cfg.item1.name} and {self.initial_item2_count} {self.cfg.item2.name}")
         
         # Main loop
         self.loop()
@@ -76,9 +76,9 @@ class BotExecutor(Bot):
             
             # Randomly choose which item to click first
             if random.choice([True, False]):
-                self.click_items_in_order(self.cfg.item1.value, self.cfg.item2.value)
+                self.click_items_in_order(self.cfg.item1.name, self.cfg.item2.name)
             else:
-                self.click_items_in_order(self.cfg.item2.value, self.cfg.item1.value)
+                self.click_items_in_order(self.cfg.item2.name, self.cfg.item1.name)
             
             # Press spacebar to start crafting
             self.press_spacebar()
@@ -97,8 +97,8 @@ class BotExecutor(Bot):
     def get_initial_counts(self):
         """Get initial item counts"""
         try:
-            self.initial_item1_count = self.client.get_item_cnt(self.cfg.item1.value, min_confidence=self.cfg.item1_confidence.value)
-            self.initial_item2_count = self.client.get_item_cnt(self.cfg.item2.value, min_confidence=self.cfg.item2_confidence.value)
+            self.initial_item1_count = self.client.get_item_cnt(self.cfg.item1.name, min_confidence=self.cfg.item1_confidence.value)
+            self.initial_item2_count = self.client.get_item_cnt(self.cfg.item2.name, min_confidence=self.cfg.item2_confidence.value)
             self.current_item1_count = self.initial_item1_count
             self.current_item2_count = self.initial_item2_count
         except Exception as e:
@@ -109,8 +109,8 @@ class BotExecutor(Bot):
     def check_materials(self, is_retry = False):
         """Check if we still have materials to craft"""
         try:
-            self.current_item1_count = self.client.get_item_cnt(self.cfg.item1.value, min_confidence=self.cfg.item1_confidence.value)
-            self.current_item2_count = self.client.get_item_cnt(self.cfg.item2.value, min_confidence=self.cfg.item2_confidence.value)
+            self.current_item1_count = self.client.get_item_cnt(self.cfg.item1.name, min_confidence=self.cfg.item1_confidence.value)
+            self.current_item2_count = self.client.get_item_cnt(self.cfg.item2.name, min_confidence=self.cfg.item2_confidence.value)
             
             return self.current_item1_count > 0 and self.current_item2_count > 0
         except Exception as e:
@@ -137,8 +137,8 @@ class BotExecutor(Bot):
         """Click two items in the specified order"""
         try:
             # Determine confidence for each item
-            first_confidence = self.cfg.item1_confidence.value if first_item == self.cfg.item1.value else self.cfg.item2_confidence.value
-            second_confidence = self.cfg.item2_confidence.value if second_item == self.cfg.item2.value else self.cfg.item1_confidence.value
+            first_confidence = self.cfg.item1_confidence.value if first_item == self.cfg.item1.name else self.cfg.item2_confidence.value
+            second_confidence = self.cfg.item2_confidence.value if second_item == self.cfg.item2.name else self.cfg.item1_confidence.value
             
 
             # Find and click first item
@@ -187,8 +187,8 @@ class BotExecutor(Bot):
             old_item1_count = self.current_item1_count
             old_item2_count = self.current_item2_count
             
-            self.current_item1_count = self.client.get_item_cnt(self.cfg.item1.value, min_confidence=self.cfg.item1_confidence.value)
-            self.current_item2_count = self.client.get_item_cnt(self.cfg.item2.value, min_confidence=self.cfg.item2_confidence.value)
+            self.current_item1_count = self.client.get_item_cnt(self.cfg.item1.name, min_confidence=self.cfg.item1_confidence.value)
+            self.current_item2_count = self.client.get_item_cnt(self.cfg.item2.name, min_confidence=self.cfg.item2_confidence.value)
             
             # Calculate items used in this cycle
             item1_used = old_item1_count - self.current_item1_count
@@ -200,7 +200,7 @@ class BotExecutor(Bot):
                 self.darts_crafted += darts_this_cycle
                 
                 self.log.info(f"Crafted {darts_this_cycle} darts this cycle. Total: {self.darts_crafted}")
-                self.log.info(f"Remaining: {self.current_item1_count} {self.cfg.item1.value}, {self.current_item2_count} {self.cfg.item2.value}")
+                self.log.info(f"Remaining: {self.current_item1_count} {self.cfg.item1.name}, {self.current_item2_count} {self.cfg.item2.name}")
             
         except Exception as e:
             self.log.warning(f"Failed to update counts: {e}")

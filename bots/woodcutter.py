@@ -1,5 +1,5 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam, RGBListParam, RouteParam, WaypointParam
+from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam, RGBListParam, RouteParam, WaypointParam, ItemParam
 from core.bot import Bot
 from core.bank import BankInterface
 
@@ -40,7 +40,7 @@ class BotConfig(BotConfigMixin):
     ###########################################
     # Willows at Draynor Village
     ###########################################
-    log_type: StringParam = StringParam("Willow logs")  # Default log name
+    log_type: ItemParam = ItemParam("Willow logs")  # Default log name
     drop_items: BooleanParam = BooleanParam(False)  # True = drop logs, False = bank logs
     bank_tile: RGBParam = RGBParam(0, 255, 0)  # Green by default, only used when banking
     bank_to_trees: RouteParam = RouteParam([
@@ -84,7 +84,7 @@ class BotExecutor(Bot):
             self.bank = BankInterface(self.client, self.client.item_db)
         
     def start(self):
-        self.log.info(f"Starting Woodcutter Bot for {self.cfg.log_type.value}")
+        self.log.info(f"Starting Woodcutter Bot for {self.cfg.log_type.name}")
         
         while True:
             try:
@@ -193,7 +193,7 @@ class BotExecutor(Bot):
             time.sleep(0.5)
             
             # Try to find logs in inventory
-            logs = self.client.get_inv_items([self.cfg.log_type.value], min_confidence=0.9)
+            logs = self.client.get_inv_items([self.cfg.log_type.name], min_confidence=0.9)
             
             # Count the logs
             log_count = len(logs)
@@ -214,10 +214,10 @@ class BotExecutor(Bot):
             time.sleep(0.5)
             
             # Find all logs in inventory
-            logs = self.client.get_inv_items([self.cfg.log_type.value], min_confidence=0.9)
+            logs = self.client.get_inv_items([self.cfg.log_type.name], min_confidence=0.9)
             
             if not logs:
-                self.log.warning(f"No {self.cfg.log_type.value} found in inventory to drop")
+                self.log.warning(f"No {self.cfg.log_type.name} found in inventory to drop")
                 return
             
             self.log.info(f"Dropping {len(logs)} logs")

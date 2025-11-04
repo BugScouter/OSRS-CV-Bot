@@ -1,6 +1,6 @@
 # ruff: noqa: BLE001
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import RangeParam, BreakCfgParam, RGBParam
+from bots.core.cfg_types import RangeParam, BreakCfgParam, RGBParam, ItemParam
 from core.bot import Bot
 from core.logger import get_logger
 from core.bank import BankInterface
@@ -14,9 +14,9 @@ control = ScriptControl()
 
 
 class BotConfig(BotConfigMixin):
-    base_item_name: str = "Battlestaff"
-    second_item_name: str = "Water orb"
-    result_item_name: str = "Water battlestaff"
+    base_item: ItemParam = ItemParam("Battlestaff")
+    second_item: ItemParam = ItemParam("Water orb")
+    result_item: ItemParam = ItemParam("Water battlestaff")
 
     combine_stack_size: int = 14
     bank_tile: RGBParam = RGBParam.from_tuple((0, 255, 0))
@@ -95,9 +95,9 @@ class BotExecutor(Bot):
             if not self._open_bank():
                 self.log.error("Cannot open bank to initialize counts.")
                 return 0
-        a = self.bank.get_item_count(self.cfg.base_item_name)
-        b = self.bank.get_item_count(self.cfg.second_item_name)
-        self.log.info("%s: %s | %s: %s", self.cfg.base_item_name, a, self.cfg.second_item_name, b)
+        a = self.bank.get_item_count(self.cfg.base_item.name)
+        b = self.bank.get_item_count(self.cfg.second_item.name)
+        self.log.info("%s: %s | %s: %s", self.cfg.base_item.name, a, self.cfg.second_item.name, b)
         self.bank.close()
         return min(a, b)
 
@@ -107,12 +107,12 @@ class BotExecutor(Bot):
 
     def _has_both_in_inv(self) -> bool:
         return (
-            self._inv_count(self.cfg.base_item_name) > 0 and
-            self._inv_count(self.cfg.second_item_name) > 0
+            self._inv_count(self.cfg.base_item.name) > 0 and
+            self._inv_count(self.cfg.second_item.name) > 0
         )
 
     def _choose_first_item(self) -> str:
-        items = [self.cfg.base_item_name, self.cfg.second_item_name]
+        items = [self.cfg.base_item.name, self.cfg.second_item.name]
         if self.cfg.randomize_withdraw_order:
             random.shuffle(items)
         return items[0]
@@ -122,9 +122,9 @@ class BotExecutor(Bot):
         Updates:
             self.first_item, self.base_items, self.second_items, self.result_before
         """
-        base_name = self.cfg.base_item_name
-        second_name = self.cfg.second_item_name
-        result_name = self.cfg.result_item_name
+        base_name = self.cfg.base_item.name
+        second_name = self.cfg.second_item.name
+        result_name = self.cfg.result_item.name
 
         # If both items already present, skip banking/deposit entirely
         if self._has_both_in_inv():
@@ -157,8 +157,8 @@ class BotExecutor(Bot):
         self.first_item = order[0]
 
     def _click_pair(self, base_items, second_items, first_item: str):
-        base_name = self.cfg.base_item_name
-        second_name = self.cfg.second_item_name
+        base_name = self.cfg.base_item.name
+        second_name = self.cfg.second_item.name
         if not base_items or not second_items:
             raise RuntimeError("Missing items in inventory after preparation")
         base = base_items[0 if first_item == base_name else -1]
@@ -186,7 +186,7 @@ class BotExecutor(Bot):
     # retriggered flag not needed; retry handled inline
 
         def crafted_so_far() -> int:
-            return max(0, self._inv_count(self.cfg.result_item_name) - result_before)
+            return max(0, self._inv_count(self.cfg.result_item.name) - result_before)
 
         crafted = crafted_so_far()
         while crafted < target_pairs:

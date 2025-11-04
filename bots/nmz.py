@@ -1,5 +1,5 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam
+from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam, ItemParam
 from core.bot import Bot
 from core.control import ScriptControl, ScriptTerminationException
 from core.osrs_client import MinimapElement, ToolplaneTab
@@ -35,15 +35,23 @@ class BotConfig(BotConfigMixin):
 
     # Health management
     target_health: IntParam = IntParam(1)  # Target health level to maintain
-    rock_cake_name: StringParam = StringParam("Dwarven rock cake")
+    rock_cake: ItemParam = ItemParam("Dwarven rock cake")
     rock_cake_confidence: FloatParam = FloatParam(0.94)
     rock_cake_click_interval: FloatParam = FloatParam(0.6)
     max_rock_cake_clicks: IntParam = IntParam(8)
 
     # Absorption management
     min_absorption: IntParam = IntParam(800)  # Minimum absorption before drinking more
-    absorption_potion_name: StringParam = StringParam("Absorption (4)")
+    absorption_potion: ItemParam = ItemParam("Absorption (4)")
     absorption_confidence: FloatParam = FloatParam(0.94)
+    
+    # Overload potions (by ID)
+    overload_potions: list[ItemParam] = [
+        ItemParam(11730),  # Overload (1)
+        ItemParam(11731),  # Overload (2)  
+        ItemParam(11732),  # Overload (3)
+        ItemParam(11733)   # Overload (4)
+    ]
     absorption_click_interval: FloatParam = FloatParam(1.0)
     absorption_clicks_per_dose: IntParam = IntParam(4)
 
@@ -205,7 +213,7 @@ class BotExecutor(Bot):
                 try:
                     if not match:
                         match = self.client.find_item(
-                            self.cfg.rock_cake_name.value,
+                            self.cfg.rock_cake.name,
                             min_confidence=self.cfg.rock_cake_confidence.value
                         )
                     self.client.click(
@@ -221,7 +229,7 @@ class BotExecutor(Bot):
                     self.handle_health(match)
                     
                 except ValueError:
-                    self.log.warning(f"Rock cake '{self.cfg.rock_cake_name.value}' not found in inventory")
+                    self.log.warning(f"Rock cake '{self.cfg.rock_cake.name}' not found in inventory")
                     
         except Exception as e:
             self.log.error(f"Error handling health: {e}")
@@ -250,7 +258,7 @@ class BotExecutor(Bot):
                         
                     try:
                         self.client.click_item(
-                            self.cfg.absorption_potion_name.value,
+                            self.cfg.absorption_potion.name,
                             min_confidence=self.cfg.absorption_confidence.value,
                             min_click_interval=self.cfg.absorption_click_interval.value,
                             click_cnt=self.cfg.absorption_clicks_per_dose.value,
@@ -259,7 +267,7 @@ class BotExecutor(Bot):
                         self.log.debug(f"Drank absorption potion {i+1}/{pots_needed}")
                         
                     except ValueError:
-                        self.log.warning(f"Absorption potion '{self.cfg.absorption_potion_name.value}' not found")
+                        self.log.warning(f"Absorption potion '{self.cfg.absorption_potion.name}' not found")
                         break
                         
         except Exception as e:
@@ -294,9 +302,9 @@ class BotExecutor(Bot):
         
         self.client.click_toolplane(ToolplaneTab.INVENTORY)
         
-        overload_items = [11733, 11732, 11731, 11730 ]
+        overload_ids = [item.id for item in self.cfg.overload_potions]
         overloads = self.client.get_inv_items(
-            overload_items,
+            overload_ids,
             min_confidence=0.98,
             do_sort=False
         )

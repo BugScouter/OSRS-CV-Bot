@@ -1,5 +1,5 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import RangeParam, BreakCfgParam, RGBParam
+from bots.core.cfg_types import RangeParam, BreakCfgParam, RGBParam, ItemParam
 from core.bot import Bot
 
 from core import tools
@@ -24,7 +24,9 @@ class BotConfig(BotConfigMixin):
     digweed_tile: RGBParam = RGBParam.from_tuple((0, 255, 255))
     hopper_tile: RGBParam = RGBParam.from_tuple((255, 0, 40))
     ingredient_exclude: list[str] = []  # e.g., ['lll', 'all','mll']
-    digweed_potions: list[str] = ["Marley's MoonLight"]
+    digweed_potions: list[ItemParam] = [ItemParam("Marley's MoonLight")]
+    digweed_item: ItemParam = ItemParam("Digweed")
+    ingredients: list[ItemParam] = [ItemParam("Mox paste"), ItemParam("Lye paste"), ItemParam("Aga paste")]
 
 
     break_cfg: BreakCfgParam = BreakCfgParam(
@@ -98,11 +100,11 @@ class BotExecutor(Bot):
             self.click_conveyor()
             
     def mix_digweed(self):
-        digweed = self.client.get_inv_items(['Digweed'])
+        digweed = self.client.get_inv_items([self.cfg.digweed_item.name])
         if not digweed:
             return
         
-        pots = self.client.get_inv_items(self.cfg.digweed_potions, min_confidence=.9)
+        pots = self.client.get_inv_items([item.name for item in self.cfg.digweed_potions], min_confidence=.9)
 
         if not pots:
             return
@@ -137,8 +139,8 @@ class BotExecutor(Bot):
                 
 
     def fill_ingredients(self) -> bool:
-        ingredients = ['Mox paste', 'Lye paste', 'Aga paste']
-        inv = self.client.get_inv_items(ingredients, min_confidence=0.9)
+        ingredient_names = [item.name for item in self.cfg.ingredients]
+        inv = self.client.get_inv_items(ingredient_names, min_confidence=0.9)
         if len(inv) < 3:
             return False
         

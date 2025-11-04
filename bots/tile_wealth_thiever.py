@@ -3,6 +3,7 @@ from bots.core.cfg_types import (
     RangeParam,
     BreakCfgParam,
     RGBParam,
+    ItemParam,
 )
 from core.bot import Bot
 from core.logger import get_logger
@@ -27,7 +28,7 @@ class BotConfig(BotConfigMixin):
     stall_reclick_s: float = 5.0   # if no gain for this long, re-click tile
 
     # Inventory
-    coin_pouch_name: str = "Coin pouch"
+    coin_pouch: ItemParam = ItemParam("Coin pouch")
     open_threshold: int = 84  # open when >= this many
     after_open_wait_s: float = 0.9  # brief settle after click before recount
 
@@ -61,7 +62,7 @@ class BotExecutor(Bot):
 
         # Initialize state
         last_gain = time.time()
-        prev_cnt = self._inv_count(self.cfg.coin_pouch_name)
+        prev_cnt = self._inv_count(self.cfg.coin_pouch.name)
 
         # Kick off by clicking the pink tile once
         try:
@@ -76,7 +77,7 @@ class BotExecutor(Bot):
                 self.control.propose_break()
 
                 # Check pouch count progression
-                cur_cnt = self._inv_count(self.cfg.coin_pouch_name)
+                cur_cnt = self._inv_count(self.cfg.coin_pouch.name)
                 if cur_cnt > prev_cnt:
                     self.log.debug("Coin pouch increased: %d -> %d", prev_cnt, cur_cnt)
                     prev_cnt = cur_cnt
@@ -100,7 +101,7 @@ class BotExecutor(Bot):
                     self._open_pouches_once()
                     # Re-count after settle
                     time.sleep(self.cfg.after_open_wait_s)
-                    after = self._inv_count(self.cfg.coin_pouch_name)
+                    after = self._inv_count(self.cfg.coin_pouch.name)
                     self.log.info(
                         "Opened coin pouches at >= %d: %d -> %d",
                         self.cfg.open_threshold,
@@ -172,7 +173,7 @@ class BotExecutor(Bot):
 
         Note: This repo exposes move_off_window(); using that as the off-screen move.
         """
-        pouch = self.cfg.coin_pouch_name
+        pouch = self.cfg.coin_pouch.name
         try:
             items = self.client.get_inv_items([pouch], x_sort=True, y_sort=True)
             if not items:

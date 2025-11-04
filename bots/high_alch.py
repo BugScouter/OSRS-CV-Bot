@@ -1,5 +1,5 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import RangeParam, BreakCfgParam
+from bots.core.cfg_types import RangeParam, BreakCfgParam, ItemParam
 from core.bot import Bot
 
 from core.osrs_client import ToolplaneTab
@@ -13,7 +13,8 @@ import pyautogui
 class BotConfig(BotConfigMixin):
     # Configuration parameters
 
-    alch_item: int = 1396  # Default to water battlestaff (noted)
+    alch_item: ItemParam = ItemParam(1396)  # Default to water battlestaff (noted)
+    nature_rune: ItemParam = ItemParam("Nature rune")
     chance_change_point: float = 0.08
 
     # makes it more human-like
@@ -44,7 +45,7 @@ class BotExecutor(Bot):
         self.alch_count = min(nattys, items)
         print(f'Found {nattys} nature runes and {items} items to alch. Alching {self.alch_count} times.')
         
-        self.find_overlap(self.cfg.alch_item)
+        self.find_overlap(self.cfg.alch_item.id)
         self.get_overlap_point()
         self.loop()
 
@@ -69,8 +70,8 @@ class BotExecutor(Bot):
                 print(f'Remaining items: {alched}')
 
     def init(self):
-        natty_count = self.client.get_item_cnt('Nature rune',min_confidence=.9)
-        item_count = self.client.get_item_cnt(self.cfg.alch_item, min_confidence=.9)
+        natty_count = self.client.get_item_cnt(self.cfg.nature_rune.name, min_confidence=.9)
+        item_count = self.client.get_item_cnt(self.cfg.alch_item.id, min_confidence=.9)
         return natty_count, item_count
     
     def get_active_tab(self) -> ToolplaneTab:

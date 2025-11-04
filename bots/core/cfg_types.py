@@ -1,6 +1,6 @@
 import random
 import json
-from typing import List, Tuple, Dict, Any, Union
+from typing import List, Tuple, Dict, Any, Union, Optional
 class RGBParam:
     def __init__(self, r: int, g: int, b: int):
         # Validate RGB values are in valid range
@@ -386,6 +386,485 @@ class RouteParam:
     
     def __repr__(self):
         return f"RouteValue({self.waypoints})"
+
+
+class ItemParam:
+    """
+    Represents an OSRS item parameter that can look up items from the item database.
+    Supports lookup by item ID, item name, or direct Item object.
+    """
+    
+    def __init__(self, item_identifier):
+        from core.item_db import ItemLookup, Item
+        
+        self._item_lookup = ItemLookup()
+        self._item: Optional[Item] = None
+        self._original_identifier = item_identifier
+        
+        # Store the item based on the identifier type
+        if isinstance(item_identifier, int):
+            self._item = self._item_lookup.get_item_by_id(item_identifier)
+            if not self._item:
+                raise ValueError(f"Item with ID {item_identifier} not found in database")
+        elif isinstance(item_identifier, str):
+            self._item = self._item_lookup.get_item_by_name(item_identifier)
+            if not self._item:
+                raise ValueError(f"Item with name '{item_identifier}' not found in database")
+        elif hasattr(item_identifier, 'id') and hasattr(item_identifier, 'name'):
+            # Assume it's an Item object
+            self._item = item_identifier
+        else:
+            raise ValueError(f"Invalid item identifier type: {type(item_identifier)}")
+
+    @staticmethod
+    def type() -> str:
+        return "Item"
+
+    @property
+    def item(self):
+        """Get the Item object"""
+        return self._item
+    
+    @property
+    def value(self) -> Dict[str, Any]:
+        """Get item data as a dictionary"""
+        if not self._item:
+            return {}
+        return {
+            'id': self._item.id,
+            'name': self._item.name,
+            'stackable': self._item.stackable,
+            'equipable': self._item.equipable,
+            'tradeable_on_ge': self._item.tradeable_on_ge,
+            'members': self._item.members,
+            'cost': self._item.cost,
+            'highalch': self._item.highalch,
+            'lowalch': self._item.lowalch
+        }
+    
+    @property
+    def id(self) -> int:
+        """Get item ID"""
+        return self._item.id if self._item else 0
+    
+    @property
+    def name(self) -> str:
+        """Get item name"""
+        return self._item.name if self._item else ""
+    
+    @property
+    def stackable(self) -> bool:
+        """Check if item is stackable"""
+        return self._item.stackable if self._item else False
+    
+    @property
+    def equipable(self) -> bool:
+        """Check if item is equipable"""
+        return self._item.equipable if self._item else False
+    
+    @classmethod
+    def from_id(cls, item_id: int) -> 'ItemParam':
+        """Create ItemParam from item ID"""
+        return cls(item_id)
+    
+    @classmethod
+    def from_name(cls, item_name: str) -> 'ItemParam':
+        """Create ItemParam from item name"""
+        return cls(item_name)
+    
+    @classmethod
+    def from_item(cls, item) -> 'ItemParam':
+        """Create ItemParam from Item object"""
+        return cls(item)
+    
+    @staticmethod
+    def load(value: Union[int, str, Dict[str, Any]]) -> 'ItemParam':
+        """Load ItemParam from various input formats"""
+        if isinstance(value, int):
+            # Item ID
+            return ItemParam.from_id(value)
+        elif isinstance(value, str):
+            # Item name
+            return ItemParam.from_name(value)
+        elif isinstance(value, dict):
+            # Dictionary with id or name
+            if 'id' in value:
+                return ItemParam.from_id(value['id'])
+            elif 'name' in value:
+                return ItemParam.from_name(value['name'])
+            else:
+                raise ValueError("Item dictionary must contain 'id' or 'name' key")
+        else:
+            raise ValueError("Item value must be an int (ID), str (name), or dict with id/name")
+    
+    def to_json(self) -> Dict[str, Any]:
+        """Export as JSON-serializable dict"""
+        return {
+            "type": self.type(),
+            "value": {
+                "id": self.id,
+                "name": self.name,
+                "stackable": self.stackable,
+                "equipable": self.equipable,
+                "tradeable_on_ge": self._item.tradeable_on_ge if self._item else False,
+                "members": self._item.members if self._item else False,
+                "cost": self._item.cost if self._item else 0,
+                "highalch": self._item.highalch if self._item else 0,
+                "lowalch": self._item.lowalch if self._item else 0
+            }
+        }
+    
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> 'ItemParam':
+        """Import from JSON data"""
+        if data.get("type") != cls.type():
+            raise ValueError(f"Expected type '{cls.type()}', got '{data.get('type')}'")
+        
+        value = data["value"]
+        if isinstance(value, dict):
+            # Prefer ID over name for more reliable lookup
+            if "id" in value:
+                return cls.from_id(value["id"])
+            elif "name" in value:
+                return cls.from_name(value["name"])
+            else:
+                raise ValueError("Item JSON value must contain 'id' or 'name'")
+        else:
+            # Fallback to load method
+            return cls.load(value)
+    
+    def search_similar(self, limit: int = 10):
+        """Search for items with similar names"""
+        if not self._item:
+            return []
+        
+        # Get items that contain parts of this item's name
+        words = self._item.name.lower().split()
+        similar_items = []
+        
+        for word in words:
+            if len(word) > 2:  # Skip very short words
+                found_items = self._item_lookup.search_items(word)
+                for item in found_items.values():
+                    if item.id != self._item.id and item not in similar_items:
+                        similar_items.append(item)
+                        if len(similar_items) >= limit:
+                            break
+            if len(similar_items) >= limit:
+                break
+        
+        return similar_items[:limit]
+    
+    def __repr__(self):
+        return f"ItemParam(id={self.id}, name='{self.name}')"
+    
+    def __str__(self):
+        return self.name
+    
+    def __eq__(self, other):
+        if isinstance(other, ItemParam):
+            return self.id == other.id
+        elif isinstance(other, int):
+            return self.id == other
+        elif isinstance(other, str):
+            return self.name.lower() == other.lower()
+        return False
     
 
-TYPES = [RGBParam, WaypointParam, RouteParam]
+
+
+
+class BooleanParam:
+    """Boolean parameter type"""
+    
+    def __init__(self, value: bool = False):
+        self._value = bool(value)
+    
+    @staticmethod
+    def type() -> str:
+        return "Boolean"
+    
+    @property
+    def value(self) -> bool:
+        return self._value
+    
+    @value.setter
+    def value(self, val: bool):
+        self._value = bool(val)
+    
+    @staticmethod
+    def load(value: Union[bool, str, int]) -> 'BooleanParam':
+        """Load BooleanParam from various input formats"""
+        if isinstance(value, bool):
+            return BooleanParam(value)
+        elif isinstance(value, str):
+            return BooleanParam(value.lower() in ('true', '1', 'yes', 'on'))
+        elif isinstance(value, int):
+            return BooleanParam(bool(value))
+        else:
+            raise ValueError("Boolean value must be a bool, str, or int")
+    
+    def to_json(self) -> Dict[str, Any]:
+        """Export as JSON-serializable dict"""
+        return {
+            "type": self.type(),
+            "value": self._value
+        }
+    
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> 'BooleanParam':
+        """Import from JSON data"""
+        if data.get("type") != cls.type():
+            raise ValueError(f"Expected type '{cls.type()}', got '{data.get('type')}'")
+        return cls(data["value"])
+    
+    def __repr__(self):
+        return f"BooleanParam({self._value})"
+    
+    def __bool__(self):
+        return self._value
+
+
+class StringParam:
+    """String parameter type"""
+    
+    def __init__(self, value: str = ""):
+        self._value = str(value)
+    
+    @staticmethod
+    def type() -> str:
+        return "String"
+    
+    @property
+    def value(self) -> str:
+        return self._value
+    
+    @value.setter
+    def value(self, val: str):
+        self._value = str(val)
+    
+    @staticmethod
+    def load(value: str) -> 'StringParam':
+        """Load StringParam from string"""
+        return StringParam(str(value))
+    
+    def to_json(self) -> Dict[str, Any]:
+        """Export as JSON-serializable dict"""
+        return {
+            "type": self.type(),
+            "value": self._value
+        }
+    
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> 'StringParam':
+        """Import from JSON data"""
+        if data.get("type") != cls.type():
+            raise ValueError(f"Expected type '{cls.type()}', got '{data.get('type')}'")
+        return cls(data["value"])
+    
+    def __repr__(self):
+        return f"StringParam('{self._value}')"
+    
+    def __str__(self):
+        return self._value
+
+
+class IntParam:
+    """Integer parameter type"""
+    
+    def __init__(self, value: int = 0):
+        self._value = int(value)
+    
+    @staticmethod
+    def type() -> str:
+        return "Int"
+    
+    @property
+    def value(self) -> int:
+        return self._value
+    
+    @value.setter
+    def value(self, val: int):
+        self._value = int(val)
+    
+    @staticmethod
+    def load(value: Union[int, str]) -> 'IntParam':
+        """Load IntParam from int or string"""
+        return IntParam(int(value))
+    
+    def to_json(self) -> Dict[str, Any]:
+        """Export as JSON-serializable dict"""
+        return {
+            "type": self.type(),
+            "value": self._value
+        }
+    
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> 'IntParam':
+        """Import from JSON data"""
+        if data.get("type") != cls.type():
+            raise ValueError(f"Expected type '{cls.type()}', got '{data.get('type')}'")
+        return cls(data["value"])
+    
+    def __repr__(self):
+        return f"IntParam({self._value})"
+    
+    def __int__(self):
+        return self._value
+
+
+class FloatParam:
+    """Float parameter type"""
+    
+    def __init__(self, value: float = 0.0):
+        self._value = float(value)
+    
+    @staticmethod
+    def type() -> str:
+        return "Float"
+    
+    @property
+    def value(self) -> float:
+        return self._value
+    
+    @value.setter
+    def value(self, val: float):
+        self._value = float(val)
+    
+    @staticmethod
+    def load(value: Union[float, int, str]) -> 'FloatParam':
+        """Load FloatParam from float, int, or string"""
+        return FloatParam(float(value))
+    
+    def to_json(self) -> Dict[str, Any]:
+        """Export as JSON-serializable dict"""
+        return {
+            "type": self.type(),
+            "value": self._value
+        }
+    
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> 'FloatParam':
+        """Import from JSON data"""
+        if data.get("type") != cls.type():
+            raise ValueError(f"Expected type '{cls.type()}', got '{data.get('type')}'")
+        return cls(data["value"])
+    
+    def __repr__(self):
+        return f"FloatParam({self._value})"
+    
+    def __float__(self):
+        return self._value
+
+
+class StringListParam:
+    """String list parameter type"""
+    
+    def __init__(self, value: List[str] = None):
+        self._value = list(value) if value else []
+    
+    @staticmethod
+    def type() -> str:
+        return "StringList"
+    
+    @property
+    def value(self) -> List[str]:
+        return self._value.copy()
+    
+    @value.setter
+    def value(self, val: List[str]):
+        self._value = list(val)
+    
+    @staticmethod
+    def load(value: List[str]) -> 'StringListParam':
+        """Load StringListParam from list of strings"""
+        return StringListParam(value)
+    
+    def to_json(self) -> Dict[str, Any]:
+        """Export as JSON-serializable dict"""
+        return {
+            "type": self.type(),
+            "value": self._value
+        }
+    
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> 'StringListParam':
+        """Import from JSON data"""
+        if data.get("type") != cls.type():
+            raise ValueError(f"Expected type '{cls.type()}', got '{data.get('type')}'")
+        return cls(data["value"])
+    
+    def __repr__(self):
+        return f"StringListParam({self._value})"
+    
+    def __len__(self):
+        return len(self._value)
+    
+    def __getitem__(self, index):
+        return self._value[index]
+    
+    def __iter__(self):
+        return iter(self._value)
+
+
+class RGBListParam:
+    """List of RGB parameters"""
+    
+    def __init__(self, value: List[RGBParam] = None):
+        self._value = list(value) if value else []
+    
+    @staticmethod
+    def type() -> str:
+        return "RGBList"
+    
+    @property
+    def value(self) -> List[RGBParam]:
+        return self._value.copy()
+    
+    @value.setter
+    def value(self, val: List[RGBParam]):
+        self._value = list(val)
+    
+    @staticmethod
+    def load(value: List[List[int]]) -> 'RGBListParam':
+        """Load RGBListParam from list of RGB tuples"""
+        rgb_params = [RGBParam.from_tuple(tuple(rgb)) for rgb in value]
+        return RGBListParam(rgb_params)
+    
+    def to_json(self) -> Dict[str, Any]:
+        """Export as JSON-serializable dict"""
+        return {
+            "type": self.type(),
+            "value": [rgb.to_json() for rgb in self._value]
+        }
+    
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> 'RGBListParam':
+        """Import from JSON data"""
+        if data.get("type") != cls.type():
+            raise ValueError(f"Expected type '{cls.type()}', got '{data.get('type')}'")
+        
+        rgb_params = []
+        for rgb_data in data["value"]:
+            if isinstance(rgb_data, dict) and rgb_data.get("type") == "RGB":
+                rgb_params.append(RGBParam.from_json(rgb_data))
+            else:
+                # Fallback for simple list format
+                rgb_params.append(RGBParam.from_tuple(tuple(rgb_data)))
+        
+        return cls(rgb_params)
+    
+    def __repr__(self):
+        return f"RGBListParam({self._value})"
+    
+    def __len__(self):
+        return len(self._value)
+    
+    def __getitem__(self, index):
+        return self._value[index]
+    
+    def __iter__(self):
+        return iter(self._value)
+
+
+TYPES = (RGBParam, WaypointParam, RouteParam, RangeParam, BreakCfgParam, ItemParam, BooleanParam, StringParam, IntParam, FloatParam, StringListParam, RGBListParam)

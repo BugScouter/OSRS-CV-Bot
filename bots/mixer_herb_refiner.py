@@ -1,5 +1,5 @@
 from bots.core import BotConfigMixin
-from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam
+from bots.core.cfg_types import BooleanParam, StringParam, IntParam, FloatParam, RGBParam, RangeParam, BreakCfgParam, ItemParam
 from core.bot import Bot
 from core.bank import BankInterface
 
@@ -25,11 +25,11 @@ class BotConfig(BotConfigMixin):
 
     bank_tile: RGBParam = RGBParam(255, 255, 0)  # Yellow
     refiner_tile: RGBParam = RGBParam(0, 255, 0)  # Green
-    #herb_option: StringParam = StringParam("Grimy lantadyme")  # aga
-    #herb_option: StringParam = StringParam("Grimy kwuarm") # lye
-    #herb_option: StringParam = StringParam("Grimy tarromin")  # mox
-    #herb_option: StringParam = StringParam("Grimy harralander")  # mox
-    herb_option: StringParam = StringParam("Grimy toadflax")  # mox
+    #herb_option: ItemParam = ItemParam("Grimy lantadyme")  # aga
+    #herb_option: ItemParam = ItemParam("Grimy kwuarm") # lye
+    #herb_option: ItemParam = ItemParam("Grimy tarromin")  # mox
+    #herb_option: ItemParam = ItemParam("Grimy harralander")  # mox
+    herb_option: ItemParam = ItemParam("Grimy toadflax")  # mox
 
     # Optional configuration
     deposit_delay: RangeParam = RangeParam(0.5, 1.5)
@@ -59,11 +59,11 @@ class BotExecutor(Bot):
         self.consecutive_failures = 0
         
     def start(self):
-        self.log.info(f"Starting Mixer Herb Refiner with herb: {self.cfg.herb_option.value}")
+        self.log.info(f"Starting Mixer Herb Refiner with herb: {self.cfg.herb_option.name}")
         while True:
             try:
                 self.open_bank_and_withdraw()
-                if "grimy" in self.cfg.herb_option.value.lower():
+                if "grimy" in self.cfg.herb_option.name.lower():
                     self.clean_herbs()
                 self.refine_herbs()
                 # Reset consecutive failures counter on successful cycle
@@ -118,9 +118,9 @@ class BotExecutor(Bot):
         time.sleep(self.cfg.deposit_delay.choose())
         
         # Withdraw herbs
-        self.log.info(f"Withdrawing {self.cfg.herb_option.value}...")
+        self.log.info(f"Withdrawing {self.cfg.herb_option.name}...")
         try:
-            self.bank.withdraw(self.cfg.herb_option.value, amount=-1)  # -1 means all
+            self.bank.withdraw(self.cfg.herb_option.name, amount=-1)  # -1 means all
             time.sleep(self.cfg.withdraw_delay.choose())
         except Exception as e:
             self.bank.close()
@@ -134,7 +134,7 @@ class BotExecutor(Bot):
         """Clean all grimy herbs in inventory"""
         self.log.info("Cleaning herbs...")
         
-        herb_name = self.cfg.herb_option.value
+        herb_name = self.cfg.herb_option.name
         # Remove "Grimy" for searching cleaned herbs
         clean_herb_name = herb_name.replace("Grimy ", "")
         
@@ -182,7 +182,7 @@ class BotExecutor(Bot):
     
     def get_herb_count(self, include_grimy=True):
         """Count herbs in inventory, both clean and grimy if specified."""
-        herb_name = self.cfg.herb_option.value
+        herb_name = self.cfg.herb_option.name
         clean_herb_name = herb_name.replace("Grimy ", "")
         
         try:
@@ -204,7 +204,7 @@ class BotExecutor(Bot):
     
     def check_and_clean_remaining_grimy(self):
         """Check inventory for any remaining grimy herbs and clean them."""
-        herb_name = self.cfg.herb_option.value
+        herb_name = self.cfg.herb_option.name
         if "grimy" not in herb_name.lower():
             return False  # Not a grimy herb type
             
@@ -232,7 +232,7 @@ class BotExecutor(Bot):
 
     def refine_herbs(self):
         """Click the refiner tile and wait until herbs are processed with improved monitoring."""
-        herb_name = self.cfg.herb_option.value
+        herb_name = self.cfg.herb_option.name
         clean_herb_name = herb_name.replace("Grimy ", "") if "grimy" in herb_name.lower() else herb_name
         
         # Get initial herb count
