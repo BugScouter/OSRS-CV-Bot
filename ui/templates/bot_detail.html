@@ -181,8 +181,8 @@
                     
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <button type="button" class="btn btn-success btn-lg" id="start-bot-btn"
-                                    {% if is_running %}disabled{% endif %}>
+                <button type="button" class="btn btn-success btn-lg" id="start-bot-btn" onclick="startBot()"
+                    {% if is_running %}disabled{% endif %}>
                                 <i class="fas fa-play"></i> Start Bot
                             </button>
                             {% if is_running %}
@@ -279,6 +279,12 @@
 
 {% block scripts %}
 <script>
+// Define startBot FIRST as a global fallback to ensure it's always available
+window.startBot = window.startBot || function() {
+    console.error('startBot called but main implementation not loaded yet - using fallback');
+    alert('Bot start function not fully loaded. Please refresh the page.');
+};
+
 console.log('Bot detail script loading...');
 const botId = '{{ bot.id }}';
 console.log('Bot ID:', botId);
@@ -289,21 +295,32 @@ let statusUpdateInterval;
 statusUpdateInterval = setInterval(updateBotStatus, 2000);
 {% endif %}
 
-// Add event listener for start bot button
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, adding event listeners...');
+// Attach click listener for start bot button (robust for when script runs before/after DOMContentLoaded)
+function attachStartButtonListener() {
+    console.log('Attaching start button listener...');
     const startButton = document.getElementById('start-bot-btn');
     if (startButton) {
-        console.log('Found start button, adding click listener');
-        startButton.addEventListener('click', function(e) {
-            console.log('Start button clicked via event listener!');
-            e.preventDefault();
-            startBot();
-        });
+        // Avoid adding multiple listeners
+        if (!startButton.dataset.listenerAttached) {
+            startButton.addEventListener('click', function(e) {
+                console.log('Start button clicked via event listener!');
+                e.preventDefault();
+                startBot();
+            });
+            startButton.dataset.listenerAttached = '1';
+            console.log('Start button listener attached');
+        }
     } else {
-        console.log('Start button not found');
+        console.log('Start button not found when attempting to attach listener');
     }
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachStartButtonListener);
+} else {
+    // DOM already loaded
+    attachStartButtonListener();
+}
 
 function updateBotStatus() {
     fetch(`/api/bot/${botId}/status`)
@@ -326,58 +343,71 @@ function updateBotStatus() {
 
 let startingBot = false;
 
-function startBot() {
-    console.log('startBot() called');
-    
-    if (startingBot) {
-        console.log('Bot is already being started, ignoring duplicate call');
-        return;
-    }
-    
-    startingBot = true;
-    console.log('botId:', botId);
-    
-    const config = gatherConfiguration();
-    console.log('config:', config);
-    
-    const username = document.getElementById('username').value;
-    console.log('username:', username);
-    
-    const requestData = {
-        config: config,
-        username: username
-    };
-    console.log('Sending request to:', `/api/bot/${botId}/start`);
-    console.log('Request data:', requestData);
-    
-    fetch(`/api/bot/${botId}/start`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestData)
-    })
-    .then(response => {
-        console.log('Response status:', response.status);
-        return response.json();
-    })
-    .then(data => {
-        console.log('Response data:', data);
-        if (data.success) {
-            // Navigate to the running bot monitor page
-            window.location.href = '/running';
-        } else {
-            alert('Failed to start bot: ' + (data.error || 'Unknown error'));
+// Main startBot implementation - also assign to window to ensure global access
+window.startBot = function startBot() {
+    try {
+        console.log('startBot() called');
+
+        if (startingBot) {
+            console.log('Bot is already being started, ignoring duplicate call');
+            return;
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert(`Error starting bot: ${error.message}`);
-    })
-    .finally(() => {
+
+        startingBot = true;
+        console.log('botId:', botId);
+
+        const config = gatherConfiguration();
+        console.log('config:', config);
+
+        const usernameEl = document.getElementById('username');
+        const username = usernameEl ? usernameEl.value : '';
+        console.log('username:', username);
+
+        const requestData = {
+            config: config,
+            username: username
+        };
+        console.log('Sending request to:', `/api/bot/${botId}/start`);
+        console.log('Request data:', requestData);
+
+        fetch(`/api/bot/${botId}/start`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        })
+        .then(response => response.text())
+        .then(text => {
+            console.log('Raw start response text:', text);
+            try {
+                const data = JSON.parse(text);
+                console.log('Parsed start response:', data);
+                if (data && data.success) {
+                    window.location.href = '/running';
+                    return;
+                }
+                alert('Failed to start bot: ' + (data && data.error ? data.error : 'Unknown error'));
+            } catch (e) {
+                console.error('Failed to parse start response as JSON:', e);
+                alert('Start endpoint returned unexpected response (see console)');
+            }
+        })
+        .catch(error => {
+            console.error('Network error during start request:', error);
+            alert('Network error starting bot (see console)');
+        })
+        .finally(() => {
+            startingBot = false;
+        });
+    } catch (err) {
+        console.error('startBot fatal error:', err);
+        alert('Failed to start bot due to a client-side error. Check console for details.');
         startingBot = false;
-    });
-}
+    }
+};  // End of window.startBot
+
+console.log('startBot function defined and assigned to window.startBot');
 
 function stopBot() {
     if (!confirm('Are you sure you want to stop this bot?')) {
@@ -593,109 +623,6 @@ function handleConfigImport(event) {
     };
     reader.readAsText(file);
 }
-        <div class="modal fade" id="itemPickerModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content bg-dark">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="fas fa-search"></i> Select Item
-                        </h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                    <i class="fas fa-search"></i>
-                                </span>
-                                <input type="text" class="form-control" id="itemPickerSearch" 
-                                       placeholder="Search for items..." value="${initialQuery}">
-                            </div>
-                        </div>
-                        <div id="itemPickerStatus" class="text-muted small mb-3">
-                            Enter a search term to find items
-                        </div>
-                        <div id="itemPickerResults" style="max-height: 400px; overflow-y: auto;">
-                            <!-- Results will be populated here -->
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Remove existing modal if present
-    const existingModal = document.getElementById('itemPickerModal');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    // Add modal to body
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
-    // Initialize modal
-    const modal = new bootstrap.Modal(document.getElementById('itemPickerModal'));
-    const searchInput = document.getElementById('itemPickerSearch');
-    let searchTimeout = null;
-    
-    // Search functionality
-    function performItemSearch() {
-        const query = searchInput.value.trim();
-        if (!query) {
-            document.getElementById('itemPickerResults').innerHTML = '';
-            document.getElementById('itemPickerStatus').textContent = 'Enter a search term to find items';
-            return;
-        }
-        
-        document.getElementById('itemPickerStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
-        
-        fetch(`/api/items/search?q=${encodeURIComponent(query)}&limit=20`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    displayItemPickerResults(data.results, paramName, modal);
-                    document.getElementById('itemPickerStatus').textContent = 
-                        data.results.length > 0 ? 
-                        `Found ${data.results.length} item${data.results.length !== 1 ? 's' : ''}` :
-                        'No items found';
-                } else {
-                    document.getElementById('itemPickerResults').innerHTML = '';
-                    document.getElementById('itemPickerStatus').innerHTML = 
-                        `<span class="text-danger"><i class="fas fa-exclamation-triangle"></i> Error: ${data.error}</span>`;
-                }
-            })
-            .catch(error => {
-                document.getElementById('itemPickerResults').innerHTML = '';
-                document.getElementById('itemPickerStatus').innerHTML = 
-                    `<span class="text-danger"><i class="fas fa-exclamation-triangle"></i> Network error</span>`;
-            });
-    }
-    
-    // Search input handler
-    searchInput.addEventListener('input', function() {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(performItemSearch, 300);
-    });
-    
-    searchInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            clearTimeout(searchTimeout);
-            performItemSearch();
-        }
-    });
-    
-    // Show modal and focus search
-    modal.show();
-    setTimeout(() => searchInput.focus(), 100);
-    
-    // Perform initial search if query provided
-    if (initialQuery) {
-        setTimeout(performItemSearch, 100);
-    }
-};
 
 // Global function to display search results in the modal
 window.displayItemPickerResults = function(items, paramName, modal) {
@@ -706,10 +633,25 @@ window.displayItemPickerResults = function(items, paramName, modal) {
         return;
     }
     
-    resultsContainer.innerHTML = items.map(item => `
+    // Helper to escape HTML in item names  
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Helper to escape for onclick attribute
+    function escapeForAttr(text) {
+        return text.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    
+    resultsContainer.innerHTML = items.map(item => {
+        const escapedName = escapeHtml(item.name);
+        const escapedForClick = escapeForAttr(item.name);
+        return `
         <div class="card mb-2 item-picker-result" 
              style="cursor: pointer; transition: all 0.2s ease;" 
-             onclick="selectItemForParam('${paramName}', ${item.id}, '${item.name.replace(/'/g, "\\'")}', modal)">
+             onclick="selectItemForParam('${paramName}', ${item.id}, '${escapedForClick}', modal)">
             <div class="card-body py-2">
                 <div class="d-flex align-items-center">
                     <div class="me-3">
@@ -717,7 +659,7 @@ window.displayItemPickerResults = function(items, paramName, modal) {
                             `<img src="data:image/png;base64,${item.icon_b64}" 
                                   style="width: 24px; height: 24px; object-fit: contain; 
                                          background: #1a1a1a; border-radius: 4px; padding: 2px;"
-                                  alt="${item.name} icon">` :
+                                  alt="${escapedName}">` :
                             `<div style="width: 24px; height: 24px; background: #1a1a1a; border-radius: 4px; 
                                         display: flex; align-items: center; justify-content: center;">
                                 <i class="fas fa-question text-muted" style="font-size: 0.7rem;"></i>
@@ -725,7 +667,7 @@ window.displayItemPickerResults = function(items, paramName, modal) {
                         }
                     </div>
                     <div class="flex-grow-1">
-                        <div class="fw-bold">${item.name}</div>
+                        <div class="fw-bold">${escapedName}</div>
                         <div class="text-muted small">ID: ${item.id}</div>
                     </div>
                     <div class="text-end">
@@ -738,7 +680,7 @@ window.displayItemPickerResults = function(items, paramName, modal) {
                 </div>
             </div>
         </div>
-    `).join('');
+    `;}).join('');
     
     // Add hover effects
     document.querySelectorAll('.item-picker-result').forEach(result => {
@@ -773,14 +715,24 @@ window.selectItemForParam = function(paramName, itemId, itemName, modal) {
     // Close modal
     modal.hide();
     
-    // Show success message
+    // Show success message - use textContent to safely insert itemName
     const message = document.createElement('div');
     message.className = 'alert alert-success alert-dismissible fade show position-fixed';
     message.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    message.innerHTML = `
-        Selected: <strong>${itemName}</strong> (ID: ${itemId})
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
+    
+    // Build message safely
+    message.appendChild(document.createTextNode('Selected: '));
+    const strong = document.createElement('strong');
+    strong.textContent = itemName;
+    message.appendChild(strong);
+    message.appendChild(document.createTextNode(` (ID: ${itemId})`));
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'btn-close';
+    closeBtn.setAttribute('data-bs-dismiss', 'alert');
+    message.appendChild(closeBtn);
+    
     document.body.appendChild(message);
     
     setTimeout(() => {
@@ -867,10 +819,12 @@ window.openItemPicker = window.openItemPicker || function(paramName, initialQuer
         fetch(`/api/items/search?q=${encodeURIComponent(query)}&limit=20`)
             .then(response => response.json())
             .then(data => {
-                if (data.length > 0) {
-                    window.displayItemPickerResults(data, paramName, modal);
+                // Backend returns { success: bool, results: [...], count: n }
+                const items = (data && data.success && Array.isArray(data.results)) ? data.results : [];
+                if (items.length > 0) {
+                    window.displayItemPickerResults(items, paramName, modal);
                     document.getElementById('itemPickerStatus').textContent = 
-                        `Found ${data.length} item${data.length !== 1 ? 's' : ''}`;
+                        `Found ${items.length} item${items.length !== 1 ? 's' : ''}`;
                 } else {
                     document.getElementById('itemPickerResults').innerHTML = '';
                     document.getElementById('itemPickerStatus').textContent = 'No items found';
@@ -916,31 +870,46 @@ window.displayItemPickerResults = window.displayItemPickerResults || function(it
         return;
     }
     
-    resultsContainer.innerHTML = items.map(item => `
+    // Helper to escape HTML in item names  
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Helper to escape for onclick attribute
+    function escapeForAttr(text) {
+        return text.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    
+    resultsContainer.innerHTML = items.map(item => {
+        const escapedName = escapeHtml(item.name);
+        const escapedForClick = escapeForAttr(item.name);
+        return `
         <div class="card mb-2 item-picker-result" 
              style="cursor: pointer; transition: all 0.2s ease;" 
-             onclick="window.selectItemForParam('${paramName}', ${item.id}, '${item.name.replace(/'/g, "\\'")}', arguments[0])">
+             onclick="window.selectItemForParam('${paramName}', ${item.id}, '${escapedForClick}', arguments[0])">
             <div class="card-body py-2">
                 <div class="d-flex align-items-center">
                     <div class="me-3">
-                        ${item.icon ? 
-                            `<img src="data:image/png;base64,${item.icon}" 
-                                  style="width: 24px; height: 24px; object-fit: contain; 
-                                         background: #1a1a1a; border-radius: 4px; padding: 2px;"
-                                  alt="${item.name}">` : 
+               ${item.icon_b64 ? 
+                `<img src="data:image/png;base64,${item.icon_b64}" 
+                      style="width: 24px; height: 24px; object-fit: contain; 
+                          background: #1a1a1a; border-radius: 4px; padding: 2px;"
+                      alt="${escapedName}">` : 
                             `<div style="width: 24px; height: 24px; background: #333; border-radius: 4px; 
                                         display: flex; align-items: center; justify-content: center;">
                                 <i class="fas fa-cube text-muted" style="font-size: 12px;"></i>
                              </div>`}
                     </div>
                     <div class="flex-grow-1">
-                        <div class="fw-bold">${item.name}</div>
+                        <div class="fw-bold">${escapedName}</div>
                         <div class="text-muted small">ID: ${item.id}</div>
                     </div>
                 </div>
             </div>
         </div>
-    `).join('');
+    `;}).join('');
     
     // Add hover effects
     document.querySelectorAll('.item-picker-result').forEach(result => {
@@ -1142,23 +1111,40 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 fetch(`/api/items/search?q=${encodeURIComponent(query)}&limit=20`)
                     .then(response => response.json())
-                    .then(items => {
+                    .then(data => {
+                        // Normalize backend response to items array
+                        const items = (data && data.success && Array.isArray(data.results)) ? data.results : [];
                         const resultsDiv = document.getElementById(`searchResults_${paramName}`);
                         const statusDiv = document.getElementById(`searchStatus_${paramName}`);
                         
+                        // Helper to escape HTML in item names
+                        function escapeHtml(text) {
+                            const div = document.createElement('div');
+                            div.textContent = text;
+                            return div.innerHTML;
+                        }
+                        
+                        // Helper to escape for onclick attribute
+                        function escapeForOnclick(text) {
+                            return text.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        }
+
                         if (items && items.length > 0) {
                             statusDiv.textContent = `Found ${items.length} items`;
-                            resultsDiv.innerHTML = items.map(item => `
+                            resultsDiv.innerHTML = items.map(item => {
+                                const escapedName = escapeHtml(item.name);
+                                const escapedForAttr = escapeForOnclick(item.name);
+                                return `
                                 <div class="card mb-2" style="cursor: pointer; background: #2d3748;" 
-                                     onclick="window.selectItem_${paramName}(${item.id}, '${item.name.replace(/'/g, "\\'")}')">
+                                     onclick="window.selectItem_${paramName}(${item.id}, '${escapedForAttr}')">
                                     <div class="card-body py-2">
                                         <div class="d-flex align-items-center">
                                             <div class="me-3">
-                                                ${item.icon ? 
-                                                    `<img src="data:image/png;base64,${item.icon}" 
+                                                ${item.icon_b64 ? 
+                                                    `<img src="data:image/png;base64,${item.icon_b64}" 
                                                           style="width: 24px; height: 24px; object-fit: contain; 
                                                                  background: #1a1a1a; border-radius: 4px; padding: 2px;"
-                                                          alt="${item.name}">` : 
+                                                          alt="${escapedName}">` : 
                                                     `<div style="width: 24px; height: 24px; background: #333; 
                                                                 border-radius: 4px; display: flex; align-items: center; 
                                                                 justify-content: center;">
@@ -1166,13 +1152,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                                      </div>`}
                                             </div>
                                             <div>
-                                                <div class="fw-bold text-white">${item.name}</div>
+                                                <div class="fw-bold text-white">${escapedName}</div>
                                                 <div class="text-muted small">ID: ${item.id}</div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            `).join('');
+                            `;}).join('');
                             
                             // Create selection function for this parameter
                             window[`selectItem_${paramName}`] = function(itemId, itemName) {
@@ -1189,11 +1175,17 @@ document.addEventListener('DOMContentLoaded', function() {
                                 
                                 modal.hide();
                                 
-                                // Success message
+                                // Success message - escape HTML safely
                                 const msg = document.createElement('div');
                                 msg.className = 'alert alert-success position-fixed';
                                 msg.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-                                msg.innerHTML = `<i class="fas fa-check"></i> Selected: <strong>${itemName}</strong>`;
+                                const checkIcon = document.createElement('i');
+                                checkIcon.className = 'fas fa-check';
+                                const strong = document.createElement('strong');
+                                strong.textContent = itemName;
+                                msg.appendChild(checkIcon);
+                                msg.appendChild(document.createTextNode(' Selected: '));
+                                msg.appendChild(strong);
                                 document.body.appendChild(msg);
                                 setTimeout(() => msg.remove(), 3000);
                             };
@@ -1235,3 +1227,57 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 {% endblock %}
+
+<!-- Fallback global startBot wrapper: ensures onclick works even if earlier script failed or was blocked -->
+<script>
+// Provide a resilient global startBot function as a last-resort fallback.
+// It will try to call the original startBot if present, otherwise send a minimal start request
+// so you can see server-side logs and diagnose the issue.
+(function(){
+    try {
+        if (typeof window.startBot === 'undefined' || window.startBot === null) {
+            window.startBot = function() {
+                console.log('Fallback startBot invoked');
+                // If a real startBot exists (declared earlier), call it
+                try {
+                    if (typeof window.__originalStartBot === 'function') {
+                        return window.__originalStartBot();
+                    }
+                } catch (e) {
+                    console.debug('No earlier startBot wrapper available:', e);
+                }
+
+                // Minimal POST to start endpoint so server logs the attempt
+                const botId = '{{ bot.id }}';
+                const payload = { config: {}, username: '' };
+                fetch(`/api/bot/${botId}/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(resp => resp.text())
+                .then(text => {
+                    try {
+                        const data = JSON.parse(text);
+                        console.log('Start response:', data);
+                        if (data && data.success) {
+                            window.location.href = '/running';
+                        } else {
+                            alert('Start failed (server returned failure). See console for details.');
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse start response as JSON:', text);
+                        alert('Start request returned non-JSON response (see console)');
+                    }
+                })
+                .catch(err => {
+                    console.error('Network error sending start request:', err);
+                    alert('Network error sending start request (see console)');
+                });
+            };
+        }
+    } catch (err) {
+        console.error('Error defining fallback startBot:', err);
+    }
+})();
+</script>
