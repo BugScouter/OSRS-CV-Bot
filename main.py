@@ -9,7 +9,7 @@ Usage:
     python main.py
 
 The web interface will be available at:
-    http://localhost:8080
+    http://localhost:8010
 """
 
 import sys
@@ -36,8 +36,8 @@ def main():
     
     print()
     print("🚀 Starting web server...")
-    print("📱 Web interface available at: http://localhost:8080")
-    print("📋 Dashboard: http://localhost:8080")
+    print("📱 Web interface available at: http://localhost:8010")
+    print("📋 Dashboard: http://localhost:8010")
     print()
     print("Press Ctrl+C to stop the server")
     print("=" * 60)
@@ -46,7 +46,7 @@ def main():
         # Start the Flask development server
         app.run(
             host='0.0.0.0', 
-            port=8080, 
+            port=8010, 
             debug=False,  # Set to False for production-like behavior
             threaded=True
         )

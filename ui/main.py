@@ -437,10 +437,7 @@ class BotManager:
                 control = executor.control
                 is_paused = getattr(control, 'pause', False)  # Use 'pause' not 'paused'
                 is_terminated = getattr(control, 'terminate', False)
-                
-                # Add debug logging for status checks
-                log.debug(f"Bot {bot_id} status check - pause: {is_paused}, terminate: {is_terminated}")
-                
+
                 if is_terminated:
                     return {'status': 'terminated'}
                 elif is_paused:
@@ -826,6 +823,3 @@ def add_cache_headers(response):
 
 if __name__ == '__main__':
     initialize_app()
-    
-    # Start the Flask development server
-    app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
